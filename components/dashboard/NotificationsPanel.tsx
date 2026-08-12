@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { WidgetCard } from "./WidgetCard";
 import { createClient } from "@/lib/supabase/server";
+import { loadNotificationsWithRead } from "@/lib/notifications/read-state";
 import { cn, formatDateTime } from "@/lib/utils";
 
 const iconByType: Record<string, React.ReactNode> = {
@@ -29,13 +30,7 @@ const toneBgByType: Record<string, string> = {
 
 export async function NotificationsPanel() {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("notifications")
-    .select("id, type, title, body, link, created_at, read_at")
-    .order("created_at", { ascending: false })
-    .limit(3);
-
-  const notifications = data ?? [];
+  const notifications = await loadNotificationsWithRead(supabase, 3);
 
   return (
     <WidgetCard
@@ -70,7 +65,7 @@ export async function NotificationsPanel() {
                 </p>
                 <p className="text-xs text-slate-500">{formatDateTime(n.created_at)}</p>
               </div>
-              {!n.read_at && (
+              {!n.read && (
                 <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-blue-700" />
               )}
             </li>

@@ -5,9 +5,18 @@ import { usePathname } from "next/navigation";
 import { Boxes, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logout } from "@/app/login/actions";
+import { Avatar } from "@/components/ui/Avatar";
 import { adminNavSections, isNavItemActive } from "@/components/nav/admin-nav-config";
 
-export function AdminSidebar({ unreadCount }: { unreadCount: number }) {
+export function AdminSidebar({
+  unreadCount,
+  userName,
+  avatarUrl,
+}: {
+  unreadCount: number;
+  userName: string;
+  avatarUrl: string | null;
+}) {
   const pathname = usePathname();
 
   return (
@@ -56,6 +65,15 @@ export function AdminSidebar({ unreadCount }: { unreadCount: number }) {
       </nav>
 
       <div className="border-t border-slate-200 p-3">
+        <Link
+          href="/admin/settings"
+          className="mb-1 flex items-center gap-2.5 rounded-md px-3 py-2 hover:bg-slate-100"
+        >
+          <Avatar name={userName} src={avatarUrl} size="sm" />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-700">
+            {userName}
+          </span>
+        </Link>
         <form action={logout}>
           <button
             type="submit"

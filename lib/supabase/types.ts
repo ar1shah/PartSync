@@ -18,6 +18,71 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_label: string | null
+          changes: Json | null
+          created_at: string
+          entity_id: string | null
+          entity_label: string | null
+          entity_type: string
+          id: string
+          summary: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_label?: string | null
+          changes?: Json | null
+          created_at?: string
+          entity_id?: string | null
+          entity_label?: string | null
+          entity_type: string
+          id?: string
+          summary: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_label?: string | null
+          changes?: Json | null
+          created_at?: string
+          entity_id?: string | null
+          entity_label?: string | null
+          entity_type?: string
+          id?: string
+          summary?: string
+        }
+        Relationships: []
+      }
+      notification_reads: {
+        Row: {
+          notification_id: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          notification_id: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          notification_id?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_reads_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           body: string | null
@@ -245,19 +310,25 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_url: string | null
           created_at: string
+          display_name: string | null
           first_name: string | null
           id: string
           last_name: string | null
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
+          display_name?: string | null
           first_name?: string | null
           id: string
           last_name?: string | null
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
+          display_name?: string | null
           first_name?: string | null
           id?: string
           last_name?: string | null
@@ -330,6 +401,30 @@ export type Database = {
         }
         Relationships: []
       }
+      user_preferences: {
+        Row: {
+          background: string
+          dashboard_layout: Json | null
+          density: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          background?: string
+          dashboard_layout?: Json | null
+          density?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          background?: string
+          dashboard_layout?: Json | null
+          density?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       public_inventory: {
@@ -372,7 +467,9 @@ export type Database = {
           skaps_number: string
         }[]
       }
+      mark_all_notifications_read: { Args: never; Returns: undefined }
       normalize_skaps_number: { Args: { s: string }; Returns: string }
+      unread_notification_count: { Args: never; Returns: number }
     }
     Enums: {
       [_ in never]: never
@@ -520,6 +617,14 @@ export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
 export type Notification = Database["public"]["Tables"]["notifications"]["Row"];
 export type NotificationInsert = Database["public"]["Tables"]["notifications"]["Insert"];
+
+export type NotificationRead = Database["public"]["Tables"]["notification_reads"]["Row"];
+
+export type UserPreferences = Database["public"]["Tables"]["user_preferences"]["Row"];
+export type UserPreferencesInsert = Database["public"]["Tables"]["user_preferences"]["Insert"];
+
+export type AuditLogEntry = Database["public"]["Tables"]["audit_log"]["Row"];
+export type AuditLogInsert = Database["public"]["Tables"]["audit_log"]["Insert"];
 
 export type PublicInventoryRow = Database["public"]["Views"]["public_inventory"]["Row"];
 

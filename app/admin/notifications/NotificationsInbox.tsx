@@ -12,13 +12,14 @@ import {
   Check,
   ClipboardList,
   CheckCheck,
+  Undo2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, formatDateTime } from "@/lib/utils";
-import { markAllAsRead, markAsRead } from "./actions";
-import type { Notification } from "@/lib/supabase/types";
+import { markAllAsRead, markAsRead, markAsUnread } from "./actions";
+import type { NotificationWithRead } from "@/lib/notifications/read-state";
 
 const iconByType: Record<string, React.ReactNode> = {
   new_request: <ClipboardList className="h-3.5 w-3.5" />,
@@ -36,7 +37,7 @@ const toneByType: Record<string, "accent" | "warning" | "danger" | "neutral" | "
   stock_updated: "success",
 };
 
-export function NotificationsInbox({ notifications }: { notifications: Notification[] }) {
+export function NotificationsInbox({ notifications }: { notifications: NotificationWithRead[] }) {
   const [pending, startTransition] = useTransition();
 
   function handleMark(id: string) {
@@ -45,6 +46,16 @@ export function NotificationsInbox({ notifications }: { notifications: Notificat
         await markAsRead(id);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed to mark as read");
+      }
+    });
+  }
+
+  function handleUnmark(id: string) {
+    startTransition(async () => {
+      try {
+        await markAsUnread(id);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to mark as unread");
       }
     });
   }
@@ -60,7 +71,7 @@ export function NotificationsInbox({ notifications }: { notifications: Notificat
     });
   }
 
-  const unread = notifications.filter((n) => !n.read_at);
+  const unread = notifications.filter((n) => !n.read);
 
   if (notifications.length === 0) {
     return (
@@ -94,7 +105,7 @@ export function NotificationsInbox({ notifications }: { notifications: Notificat
               key={n.id}
               className={cn(
                 "flex items-start gap-3 px-5 py-4",
-                !n.read_at && "bg-blue-50/40",
+                !n.read && "bg-blue-50/40",
               )}
             >
               <Badge tone={toneByType[n.type] ?? "neutral"} className="mt-0.5 gap-1">
@@ -116,7 +127,17 @@ export function NotificationsInbox({ notifications }: { notifications: Notificat
                 <p className="mt-1 text-xs text-slate-400">{formatDateTime(n.created_at)}</p>
               </div>
 
-              {!n.read_at && (
+              {n.read ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleUnmark(n.id)}
+                  disabled={pending}
+                  aria-label="Mark as unread"
+                >
+                  <Undo2 className="h-4 w-4 text-slate-400" />
+                </Button>
+              ) : (
                 <Button
                   variant="ghost"
                   size="sm"
