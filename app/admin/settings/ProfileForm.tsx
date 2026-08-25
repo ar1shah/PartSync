@@ -15,10 +15,12 @@ export function ProfileForm({
   email,
   firstName,
   lastName,
+  displayName,
 }: {
   email: string;
   firstName: string;
   lastName: string;
+  displayName: string;
 }) {
   const [state, formAction] = useActionState(updateProfile, INITIAL);
 
@@ -54,6 +56,16 @@ export function ProfileForm({
             className="mt-1.5"
           />
         </div>
+      </div>
+      <div>
+        <Label htmlFor="display_name">Display name (optional)</Label>
+        <Input
+          id="display_name"
+          name="display_name"
+          defaultValue={displayName}
+          placeholder="Shown in the dashboard greeting instead of your name"
+          className="mt-1.5"
+        />
       </div>
       <SaveButton />
     </form>

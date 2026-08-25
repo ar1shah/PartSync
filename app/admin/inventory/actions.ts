@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { diffFields, recordAudit } from "@/lib/audit/log";
 
 const optionalString = (max: number) =>
   z
@@ -73,13 +74,25 @@ export async function createPart(_prev: PartFormState, formData: FormData): Prom
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("parts").insert(parsed.data);
+  const { data: inserted, error } = await supabase
+    .from("parts")
+    .insert(parsed.data)
+    .select("id")
+    .maybeSingle();
   if (error) {
     if (error.code === "23505") {
       return { fieldErrors: { skaps_number: "A part with this SKAPS number already exists." } };
     }
     return { error: error.message };
   }
+
+  await recordAudit({
+    action: "part.created",
+    entityType: "part",
+    entityId: inserted?.id ?? null,
+    entityLabel: `${parsed.data.skaps_number} (${parsed.data.name})`,
+    summary: `Created part ${parsed.data.skaps_number} (${parsed.data.name})`,
+  });
 
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
@@ -101,6 +114,12 @@ export async function updatePart(
   }
 
   const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("parts")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase.from("parts").update(parsed.data).eq("id", id);
   if (error) {
     if (error.code === "23505") {
@@ -108,6 +127,15 @@ export async function updatePart(
     }
     return { error: error.message };
   }
+
+  await recordAudit({
+    action: "part.updated",
+    entityType: "part",
+    entityId: id,
+    entityLabel: `${parsed.data.skaps_number} (${parsed.data.name})`,
+    summary: `Updated part ${parsed.data.skaps_number} (${parsed.data.name})`,
+    changes: diffFields(before ?? undefined, parsed.data),
+  });
 
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
@@ -117,10 +145,28 @@ export async function updatePart(
 
 export async function deletePart(id: string) {
   const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("parts")
+    .select("skaps_number, name")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase.from("parts").delete().eq("id", id);
   if (error) {
     throw new Error(error.message);
   }
+
+  const label = before
+    ? `${before.skaps_number} (${before.name})`
+    : "part";
+  await recordAudit({
+    action: "part.deleted",
+    entityType: "part",
+    entityId: id,
+    entityLabel: label,
+    summary: `Deleted part ${label}`,
+  });
+
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
 }

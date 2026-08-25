@@ -6,6 +6,7 @@ import {
   ClipboardList,
   History,
   LayoutDashboard,
+  ScrollText,
   Settings,
   Truck,
   Wrench,
@@ -25,6 +26,7 @@ export const adminNavSections: { label: string; items: NavItem[] }[] = [
       { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
       { href: "/admin/notifications", label: "Notifications", icon: Bell },
       { href: "/admin/reports/yesterday", label: "Yesterday report", icon: CalendarClock },
+      { href: "/admin/audit", label: "Activity log", icon: ScrollText },
     ],
   },
   {

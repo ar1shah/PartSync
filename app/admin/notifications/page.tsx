@@ -1,28 +1,14 @@
 import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import type { Notification } from "@/lib/supabase/types";
+import { loadNotificationsWithRead } from "@/lib/notifications/read-state";
 import { NotificationsInbox } from "./NotificationsInbox";
 
 export const dynamic = "force-dynamic";
 
-async function load(): Promise<Notification[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("notifications")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(200);
-
-  if (error) {
-    console.error("failed to load notifications", error);
-    return [];
-  }
-  return data ?? [];
-}
-
 export default async function NotificationsPage() {
-  const notifications = await load();
-  const unread = notifications.filter((n) => !n.read_at).length;
+  const supabase = await createClient();
+  const notifications = await loadNotificationsWithRead(supabase, 200);
+  const unread = notifications.filter((n) => !n.read).length;
 
   return (
     <div>

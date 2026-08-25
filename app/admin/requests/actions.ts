@@ -3,6 +3,23 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { recordAudit } from "@/lib/audit/log";
+
+/** Short label for a request row, e.g. "BELT-12 (Drive belt)". */
+async function requestLabel(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  id: string,
+): Promise<string> {
+  const { data } = await supabase
+    .from("submissions")
+    .select("skaps_number, part_description")
+    .eq("id", id)
+    .maybeSingle();
+  const skaps = data?.skaps_number;
+  const desc = data?.part_description;
+  if (skaps && desc) return `${skaps} (${desc})`;
+  return skaps ?? desc ?? "request";
+}
 
 const optionalString = (max: number) =>
   z
@@ -51,6 +68,7 @@ export async function updateRequestSubmission(
   }
 
   const supabase = await createClient();
+  const label = await requestLabel(supabase, id);
   const { error } = await supabase
     .from("submissions")
     .update(parsed.data)
@@ -60,12 +78,22 @@ export async function updateRequestSubmission(
     return { error: error.message };
   }
 
+  await recordAudit({
+    action: "request.updated",
+    entityType: "submission",
+    entityId: id,
+    entityLabel: label,
+    summary: `Edited request for ${label}`,
+    changes: parsed.data,
+  });
+
   revalidateRequestPaths();
   return { ok: true };
 }
 
 export async function markRequestOrdered(id: string): Promise<void> {
   const supabase = await createClient();
+  const label = await requestLabel(supabase, id);
   const { error } = await supabase
     .from("submissions")
     .update({ status: "ordered" })
@@ -74,11 +102,19 @@ export async function markRequestOrdered(id: string): Promise<void> {
   if (error) {
     throw new Error(error.message);
   }
+  await recordAudit({
+    action: "request.marked_ordered",
+    entityType: "submission",
+    entityId: id,
+    entityLabel: label,
+    summary: `Marked request for ${label} as ordered`,
+  });
   revalidateRequestPaths();
 }
 
 export async function markRequestComplete(id: string): Promise<void> {
   const supabase = await createClient();
+  const label = await requestLabel(supabase, id);
   const { error } = await supabase
     .from("submissions")
     .update({ status: "closed" })
@@ -87,11 +123,19 @@ export async function markRequestComplete(id: string): Promise<void> {
   if (error) {
     throw new Error(error.message);
   }
+  await recordAudit({
+    action: "request.marked_complete",
+    entityType: "submission",
+    entityId: id,
+    entityLabel: label,
+    summary: `Marked request for ${label} as complete`,
+  });
   revalidateRequestPaths();
 }
 
 export async function markRequestRequested(id: string): Promise<void> {
   const supabase = await createClient();
+  const label = await requestLabel(supabase, id);
   const { error } = await supabase
     .from("submissions")
     .update({ status: "open" })
@@ -100,11 +144,19 @@ export async function markRequestRequested(id: string): Promise<void> {
   if (error) {
     throw new Error(error.message);
   }
+  await recordAudit({
+    action: "request.marked_requested",
+    entityType: "submission",
+    entityId: id,
+    entityLabel: label,
+    summary: `Marked request for ${label} as requested again`,
+  });
   revalidateRequestPaths();
 }
 
 export async function deleteRequestSubmission(id: string): Promise<void> {
   const supabase = await createClient();
+  const label = await requestLabel(supabase, id);
   const { error } = await supabase
     .from("submissions")
     .delete()
@@ -113,5 +165,12 @@ export async function deleteRequestSubmission(id: string): Promise<void> {
   if (error) {
     throw new Error(error.message);
   }
+  await recordAudit({
+    action: "request.deleted",
+    entityType: "submission",
+    entityId: id,
+    entityLabel: label,
+    summary: `Deleted request for ${label}`,
+  });
   revalidateRequestPaths();
 }

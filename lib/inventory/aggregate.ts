@@ -14,7 +14,7 @@ export interface FieldBreakdown {
  */
 export function groupSubmissionsByField(
   rows: Submission[],
-  field: "pm_type" | "line",
+  field: "pm_type" | "line" | "machine_area",
 ): FieldBreakdown[] {
   const map = new Map<string, FieldBreakdown>();
   for (const row of rows) {

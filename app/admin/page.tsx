@@ -1,44 +1,42 @@
-import { ConsumedTodayWidget } from "@/components/dashboard/ConsumedTodayWidget";
-import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
-import { PartsInRepairWidget } from "@/components/dashboard/PartsInRepairWidget";
-import { PmTypeBreakdownWidget } from "@/components/dashboard/PmTypeBreakdownWidget";
-import { QuickFormLinks } from "@/components/dashboard/QuickFormLinks";
-import { TopConsumersWidget } from "@/components/dashboard/TopConsumersWidget";
-import { UsageByLineWidget } from "@/components/dashboard/UsageByLineWidget";
-import { WeeklyOverviewChart } from "@/components/dashboard/WeeklyOverviewChart";
+import type { ReactNode } from "react";
 import { WelcomeHeader } from "@/components/dashboard/WelcomeHeader";
-import { YesterdayReportWidget } from "@/components/dashboard/YesterdayReportWidget";
+import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
+import { createClient } from "@/lib/supabase/server";
+import { parseDashboardLayout, type WidgetId } from "@/lib/dashboard/catalog";
+import { WIDGET_COMPONENTS } from "@/lib/dashboard/widgets";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminDashboardPage() {
+export default async function AdminDashboardPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let layoutRaw: unknown = null;
+  if (user) {
+    const { data: prefs } = await supabase
+      .from("user_preferences")
+      .select("dashboard_layout")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    layoutRaw = prefs?.dashboard_layout ?? null;
+  }
+
+  const layout = parseDashboardLayout(layoutRaw);
+
+  // Render only the widgets that are actually placed. Hidden widgets are
+  // never instantiated, so they do no database work.
+  const nodes: Partial<Record<WidgetId, ReactNode>> = {};
+  for (const placement of layout.widgets) {
+    const Widget = WIDGET_COMPONENTS[placement.id];
+    nodes[placement.id] = <Widget />;
+  }
+
   return (
     <div className="space-y-8">
       <WelcomeHeader />
-
-      {/* Today's operational snapshot -- the numbers the team checks first thing. */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <ConsumedTodayWidget />
-        <YesterdayReportWidget />
-        <PartsInRepairWidget />
-      </div>
-
-      {/* Attention feed + quick access to the forms the team submits daily. */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <NotificationsPanel />
-        </div>
-        <QuickFormLinks />
-      </div>
-
-      {/* Usage analytics -- where the parts are going and why. */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <TopConsumersWidget />
-        <UsageByLineWidget />
-        <PmTypeBreakdownWidget />
-      </div>
-
-      <WeeklyOverviewChart />
+      <DashboardGrid initial={layout.widgets} nodes={nodes} />
     </div>
   );
 }
