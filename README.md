@@ -1,4 +1,4 @@
-# SKAPS Parts Inventory
+# PartSync
 
 **A production inventory dashboard built for the SKAPS maintenance team.**
 
