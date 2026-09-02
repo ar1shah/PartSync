@@ -10,10 +10,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ExpenseStatusDot } from "@/components/admin/ExpenseStatusDot";
 import { PartDetailModal } from "@/components/inventory/PartDetailModal";
 import { PartHoverPreview } from "@/components/inventory/PartHoverPreview";
-import { EditPartModal } from "@/components/inventory/EditPartModal";
 import { formatDateTime, formatNumber } from "@/lib/utils";
 import { urgencyTone, normalizeSkapsNumber } from "@/lib/forms/normalize";
-import type { InventoryPart, Part, Submission } from "@/lib/supabase/types";
+import type { InventoryPart } from "@/lib/inventory-backend/types";
+import type { Submission } from "@/lib/supabase/types";
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -55,11 +55,7 @@ interface Props {
    * followed by the older rows collapsed into one closed section per month.
    */
   groupByPeriod?: boolean;
-  /**
-   * Master-list parts, used to resolve a submission's skaps_number to a real
-   * part for the hover preview / detail popup. Only passed by the used log.
-   */
-  parts?: Part[];
+  /** New SKAPS inventory, used to resolve a submission's free-text SKAPS number. */
   inventoryParts?: InventoryPart[];
 }
 
@@ -67,13 +63,11 @@ export function SubmissionsTable({
   submissions,
   formType,
   groupByPeriod = false,
-  parts,
   inventoryParts,
 }: Props) {
   const [query, setQuery] = useState("");
   const [showNeedsReview, setShowNeedsReview] = useState(false);
   const [selectedPart, setSelectedPart] = useState<InventoryPart | null>(null);
-  const [editingPart, setEditingPart] = useState<Part | null>(null);
 
   // Normalized skaps# -> part, so recognized rows can link to the master
   // part even though `submissions.skaps_number` is free text with no FK.
@@ -94,12 +88,6 @@ export function SubmissionsTable({
     }
     return map;
   }, [inventoryParts]);
-
-  function handleEdit(skapsNumber: string) {
-    const part = parts?.find((p) => p.skaps_number === skapsNumber);
-    if (part) setEditingPart(part);
-    setSelectedPart(null);
-  }
 
   const needsReviewCount = useMemo(
     () => submissions.filter((s) => s.status === "needs_review").length,
@@ -384,15 +372,8 @@ export function SubmissionsTable({
         )}
 
         {selectedPart && (
-          <PartDetailModal
-            part={selectedPart}
-            onClose={() => setSelectedPart(null)}
-            adminMode
-            onEdit={handleEdit}
-          />
+          <PartDetailModal part={selectedPart} onClose={() => setSelectedPart(null)} />
         )}
-
-        {editingPart && <EditPartModal part={editingPart} onClose={() => setEditingPart(null)} />}
       </div>
     </TooltipProvider>
   );

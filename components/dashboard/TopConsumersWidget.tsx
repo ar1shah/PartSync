@@ -1,28 +1,38 @@
 import { TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
+import { normalizeSkapsNumber } from "@/lib/forms/normalize";
 import { TopConsumersChartClient } from "./TopConsumersChartClient";
 
 const TOP_N = 8;
 
 export async function TopConsumersWidget() {
+  // Usage history remains in the legacy PartSync submissions table during
+  // phase 1. Aggregate from submissions directly instead of old public_inventory.
   const supabase = await createClient();
-
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
-    .from("public_inventory")
-    .select("skaps_number, name, used_last_30d")
-    .gt("used_last_30d", 0)
-    .order("used_last_30d", { ascending: false })
-    .limit(TOP_N);
+    .from("submissions")
+    .select("skaps_number,quantity")
+    .eq("form_type", "used")
+    .gte("submitted_at", since)
+    .not("skaps_number", "is", null);
 
-  if (error) {
-    console.error("failed to load top consumers", error);
+  if (error) console.error("failed to load usage submissions", error);
+
+  const totals = new Map<string, { label: string; value: number }>();
+  for (const row of data ?? []) {
+    if (!row.skaps_number) continue;
+    const key = normalizeSkapsNumber(row.skaps_number);
+    if (!key) continue;
+    const current = totals.get(key) ?? { label: row.skaps_number, value: 0 };
+    current.value += Number(row.quantity ?? 0) || 0;
+    totals.set(key, current);
   }
 
-  const series = (data ?? []).map((row) => ({
-    label: row.skaps_number ?? row.name ?? "Unknown part",
-    value: row.used_last_30d ?? 0,
-  }));
+  const series = Array.from(totals.values())
+    .sort((a, b) => b.value - a.value)
+    .slice(0, TOP_N);
 
   return (
     <Card>
@@ -30,7 +40,7 @@ export async function TopConsumersWidget() {
         <div className="flex items-start justify-between">
           <div>
             <h3 className="text-sm font-semibold text-slate-900">Top consumers</h3>
-            <p className="mt-0.5 text-xs text-slate-500">Highest usage in the last 30 days</p>
+            <p className="mt-0.5 text-xs text-slate-500">Highest logged usage in the last 30 days</p>
           </div>
           <div className="rounded-md bg-blue-50 p-2 text-blue-700">
             <TrendingUp className="h-4 w-4" />

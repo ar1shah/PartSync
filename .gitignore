@@ -41,3 +41,5 @@ supabase/.temp
 .agents
 .cursor
 .claude
+.vercel
+.env*

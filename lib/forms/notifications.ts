@@ -1,23 +1,16 @@
 /**
- * Post-insert notification generator. Called from /api/ingest right after
- * a submission is upserted.
- *
- * The submissions table trigger has already decremented stock (for exact
- * or normalized SKAPS# matches) by the time we get here.
- *
- * For "used" submissions:
- *   - Match found → emit stock_updated notification
- *   - No match    → flag submission as needs_review, emit unknown_skaps
- *                   notification with fuzzy-match suggestions if any
+ * Post-insert notification generator. Submissions/notifications stay in the
+ * legacy PartSync Supabase project during phase 1, while SKAPS matching is
+ * resolved against the new SKAPS Spare Parts Inventory project.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, NotificationInsert, Submission } from "@/lib/supabase/types";
 import { isUrgent } from "./normalize";
 import {
-  findFuzzySkapsMatches,
-  findPartBySkapsNumber,
-} from "@/lib/inventory/skaps-match";
+  findFuzzyInventoryMatches,
+  findInventoryPartBySkapsNumber,
+} from "@/lib/inventory-backend/match";
 
 type Client = SupabaseClient<Database>;
 
@@ -27,7 +20,6 @@ export async function emitNotificationsForSubmission(
 ): Promise<void> {
   const inserts: NotificationInsert[] = [];
 
-  // ── Parts Requests ────────────────────────────────────────────────────────
   if (submission.form_type === "request") {
     inserts.push({
       type: "new_request",
@@ -48,24 +40,23 @@ export async function emitNotificationsForSubmission(
     }
   }
 
-  // ── Parts Used ────────────────────────────────────────────────────────────
   if (submission.form_type === "used" && submission.skaps_number) {
-    const part = await findPartBySkapsNumber(client, submission.skaps_number);
+    const part = await findInventoryPartBySkapsNumber(submission.skaps_number);
 
     if (!part) {
-      const fuzzy = await findFuzzySkapsMatches(client, submission.skaps_number);
+      const fuzzy = await findFuzzyInventoryMatches(submission.skaps_number);
       const suggestions =
         fuzzy.length > 0
           ? `\nPossible matches: ${fuzzy.map((f) => `${f.skaps_number} (${f.name})`).join(", ")}`
-          : "\nNo similar SKAPS# found in the master list.";
+          : "\nNo similar SKAPS# found in SKAPS Spare Parts Inventory.";
 
       inserts.push({
         type: "unknown_skaps",
         title: `Unmatched SKAPS #: ${submission.skaps_number}`,
         body:
           `${submission.employee_name ?? "Someone"} logged ${submission.quantity ?? "?"} used but ` +
-          `"${submission.skaps_number}" doesn't match any part in the master list. ` +
-          `Qty was NOT deducted. Please review manually.${suggestions}`,
+          `"${submission.skaps_number}" does not match the new SKAPS inventory. ` +
+          `Please review manually.${suggestions}`,
         link: "/admin/used",
       });
 
@@ -81,24 +72,12 @@ export async function emitNotificationsForSubmission(
 
       inserts.push({
         type: "stock_updated",
-        title: `Stock updated: ${part.name} (${part.skaps_number})`,
+        title: `Usage logged: ${part.name} (${part.skaps_number})`,
         body:
           `${submission.employee_name ?? "Someone"} used ${submission.quantity ?? "?"} unit(s).` +
-          `${matchedNote} New qty: ${Math.max(0, part.current_quantity)}.`,
+          `${matchedNote} Current SKAPS inventory quantity: ${Math.max(0, part.current_quantity)}.`,
         link: "/admin/inventory",
       });
-
-      if (
-        part.reorder_threshold !== null &&
-        part.current_quantity <= part.reorder_threshold
-      ) {
-        inserts.push({
-          type: "low_stock",
-          title: `Low stock: ${part.name} (${part.skaps_number})`,
-          body: `Only ${Math.max(0, part.current_quantity)} left (reorder at ${part.reorder_threshold}).`,
-          link: "/admin/inventory",
-        });
-      }
     }
   }
 
@@ -108,7 +87,7 @@ export async function emitNotificationsForSubmission(
       title: "Parts used: no SKAPS # provided",
       body:
         `${submission.employee_name ?? "Someone"} logged a parts-used entry with no SKAPS number. ` +
-        `Part: ${submission.part_description ?? "(no description)"}. Qty was NOT deducted.`,
+        `Part: ${submission.part_description ?? "(no description)"}. Please review manually.`,
       link: "/admin/used",
     });
 
@@ -121,7 +100,5 @@ export async function emitNotificationsForSubmission(
   if (inserts.length === 0) return;
 
   const { error } = await client.from("notifications").insert(inserts);
-  if (error) {
-    console.error("Failed to write notifications", error);
-  }
+  if (error) console.error("Failed to write notifications", error);
 }

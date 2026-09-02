@@ -3,6 +3,7 @@ import { ArrowRight, ClipboardList, Package, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
+import { createInventoryServiceClient } from "@/lib/inventory-backend/server";
 import { formatNumber } from "@/lib/utils";
 
 export const revalidate = 60;
@@ -17,8 +18,12 @@ async function loadStats() {
     return null;
   }
 
+  const inventory = createInventoryServiceClient();
   const [{ count: partsCount }, { count: usedThisWeekCount }] = await Promise.all([
-    supabase.from("parts").select("id", { count: "exact", head: true }),
+    inventory
+      .from("parts_app_view")
+      .select("part_id", { count: "exact", head: true })
+      .eq("active", true),
     supabase
       .from("submissions")
       .select("id", { count: "exact", head: true })
@@ -48,9 +53,9 @@ export default async function HomePage() {
           </h1>
           <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-600">
             Submit a part-used or part-request form when you need to log usage
-            or ask for stock. Admins can sign in to browse inventory, manage
-            parts, and review submissions. Everything stays in sync with the
-            maintenance team&apos;s Google Forms.
+            or ask for stock. Admins can sign in to browse the full SKAPS spare-parts
+            inventory and review submissions. Forms remain connected for workflow
+            intake while the master inventory is served from the dedicated SKAPS database.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -107,7 +112,7 @@ export default async function HomePage() {
           href="/login?next=/inventory"
           icon={<Search className="h-5 w-5" />}
           title="Browse inventory"
-          body="Sign in to search by SKAPS number or part name. Filter by category, location, or low stock."
+          body="Sign in to search by SKAPS number or part name. Filter by category, location, or stock status."
         />
         <FeatureLink
           href="/forms"

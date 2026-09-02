@@ -1,22 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Filter, Package, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { normalizeSkapsNumber } from "@/lib/forms/normalize";
 import { PartTileCard } from "./PartTileCard";
 import { PartDetailModal } from "./PartDetailModal";
-import type { InventoryPart } from "@/lib/supabase/types";
+import type { InventoryPart } from "@/lib/inventory-backend/types";
 
 interface Props {
   parts: InventoryPart[];
-  adminMode?: boolean;
-  onEdit?: (skapsNumber: string) => void;
 }
 
-type StockFilter = "all" | "in_stock" | "low_stock" | "out_of_stock";
+type StockFilter = "all" | "in_stock" | "out_of_stock";
 
 /** Lower is a closer SKAPS # match; Infinity means the query only matched some other field. */
 function skapsMatchRank(
@@ -40,11 +39,12 @@ function skapsMatchRank(
   return allTokensInSkaps ? 3 : Number.POSITIVE_INFINITY;
 }
 
-export function InventoryTileGrid({ parts, adminMode = false, onEdit }: Props) {
+export function InventoryTileGrid({ parts }: Props) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
   const [selected, setSelected] = useState<InventoryPart | null>(null);
+  const [visibleCount, setVisibleCount] = useState(240);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -104,13 +104,8 @@ export function InventoryTileGrid({ parts, adminMode = false, onEdit }: Props) {
       if (category && part.category !== category) return false;
 
       const qty = part.quantity_on_hand ?? 0;
-      const threshold = part.reorder_threshold;
       if (stockFilter === "in_stock" && qty <= 0) return false;
       if (stockFilter === "out_of_stock" && qty > 0) return false;
-      if (stockFilter === "low_stock") {
-        if (threshold === null || threshold === undefined) return false;
-        if (qty > threshold) return false;
-      }
       return true;
     });
 
@@ -129,6 +124,12 @@ export function InventoryTileGrid({ parts, adminMode = false, onEdit }: Props) {
       .sort((a, b) => a.rank - b.rank || a.index - b.index)
       .map(({ part }) => part);
   }, [searchIndex, query, category, stockFilter]);
+
+  useEffect(() => {
+    setVisibleCount(240);
+  }, [query, category, stockFilter]);
+
+  const visible = filtered.slice(0, visibleCount);
 
   return (
     <div>
@@ -153,7 +154,6 @@ export function InventoryTileGrid({ parts, adminMode = false, onEdit }: Props) {
             [
               ["all", "All"],
               ["in_stock", "In stock"],
-              ["low_stock", "Low stock"],
               ["out_of_stock", "Out of stock"],
             ] as Array<[StockFilter, string]>
           ).map(([value, label]) => (
@@ -192,7 +192,7 @@ export function InventoryTileGrid({ parts, adminMode = false, onEdit }: Props) {
         <NoMatchesState />
       ) : (
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {filtered.map((part) => (
+          {visible.map((part) => (
             <PartTileCard
               key={part.skaps_number ?? part.name}
               part={part}
@@ -202,14 +202,15 @@ export function InventoryTileGrid({ parts, adminMode = false, onEdit }: Props) {
         </div>
       )}
 
-      {selected && (
-        <PartDetailModal
-          part={selected}
-          onClose={() => setSelected(null)}
-          adminMode={adminMode}
-          onEdit={onEdit}
-        />
+      {filtered.length > visible.length && (
+        <div className="mt-6 flex justify-center">
+          <Button variant="outline" onClick={() => setVisibleCount((n) => n + 240)}>
+            Load more ({(filtered.length - visible.length).toLocaleString()} remaining)
+          </Button>
+        </div>
       )}
+
+      {selected && <PartDetailModal part={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
@@ -247,7 +248,7 @@ function EmptyState() {
         <div>
           <p className="font-medium text-slate-900">No parts in the inventory yet</p>
           <p className="mt-1 text-sm text-slate-600">
-            Run the master list import or add parts manually from the admin panel.
+            Add a new SKAPS part from the admin panel or import it through the controlled inventory workflow.
           </p>
         </div>
       </CardContent>

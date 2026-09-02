@@ -1,58 +1,51 @@
 import { AlertTriangle } from "lucide-react";
 import { WidgetCard } from "./WidgetCard";
-import { createClient } from "@/lib/supabase/server";
+import { createInventoryServiceClient } from "@/lib/inventory-backend/server";
 import { formatNumber } from "@/lib/utils";
 
 export async function LowStockWidget() {
-  const supabase = await createClient();
+  const inventory = createInventoryServiceClient();
 
-  // Postgres can't compare two columns through PostgREST, so pull the parts
-  // that have a threshold set and do the qty <= threshold check in TS.
-  const { data, error } = await supabase
-    .from("public_inventory")
-    .select("id, skaps_number, name, quantity_on_hand, reorder_threshold")
-    .not("reorder_threshold", "is", null)
-    .order("quantity_on_hand", { ascending: true });
+  const [{ count, error: countError }, { data, error }] = await Promise.all([
+    inventory
+      .from("parts_app_view")
+      .select("part_id", { count: "exact", head: true })
+      .eq("active", true)
+      .lte("current_quantity", 0),
+    inventory
+      .from("parts_app_view")
+      .select("part_id,skaps_number,product_name,current_quantity")
+      .eq("active", true)
+      .lte("current_quantity", 0)
+      .order("skaps_number", { ascending: true })
+      .limit(3),
+  ]);
 
-  if (error) {
-    console.error("failed to load low-stock parts", error);
-  }
-
-  const low = (data ?? []).filter(
-    (p) =>
-      p.reorder_threshold !== null &&
-      (p.quantity_on_hand ?? 0) <= (p.reorder_threshold ?? 0),
-  );
+  if (countError) console.error("failed to count zero-stock parts", countError);
+  if (error) console.error("failed to load zero-stock sample", error);
 
   return (
     <WidgetCard
-      title="Low stock"
-      description="At or below reorder threshold"
+      title="Out of stock"
+      description="Parts with quantity at zero"
       icon={<AlertTriangle className="h-4 w-4" />}
       href="/admin/inventory"
     >
       <div className="flex items-baseline gap-3">
-        <span className="text-3xl font-semibold text-slate-900">{formatNumber(low.length)}</span>
-        <span className="text-xs text-slate-500">parts need attention</span>
+        <span className="text-3xl font-semibold text-slate-900">{formatNumber(count ?? 0)}</span>
+        <span className="text-xs text-slate-500">parts at zero</span>
       </div>
 
-      {low.length > 0 ? (
+      {(data ?? []).length > 0 && (
         <ul className="mt-3 space-y-1.5">
-          {low.slice(0, 3).map((p) => (
-            <li key={p.id} className="flex items-baseline justify-between text-xs text-slate-600">
-              <span className="truncate">
-                <span className="font-mono text-slate-500">{p.skaps_number ?? "?"}</span>
-                <span className="mx-1.5 text-slate-300">&middot;</span>
-                <span>{p.name ?? "(unnamed)"}</span>
-              </span>
-              <span className="ml-2 shrink-0 font-medium text-amber-600">
-                {formatNumber(p.quantity_on_hand ?? 0)} / {formatNumber(p.reorder_threshold ?? 0)}
-              </span>
+          {(data ?? []).map((p) => (
+            <li key={p.part_id} className="text-xs text-slate-600">
+              <span className="font-mono text-slate-500">{p.skaps_number ?? "?"}</span>
+              <span className="mx-1.5 text-slate-300">&middot;</span>
+              <span>{p.product_name ?? "(unnamed)"}</span>
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="mt-3 text-xs text-slate-500">Everything is above its reorder point.</p>
       )}
     </WidgetCard>
   );

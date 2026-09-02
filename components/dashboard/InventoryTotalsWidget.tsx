@@ -1,30 +1,38 @@
 import { Layers } from "lucide-react";
 import { WidgetCard } from "./WidgetCard";
-import { createClient } from "@/lib/supabase/server";
+import { createInventoryServiceClient } from "@/lib/inventory-backend/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { formatNumber } from "@/lib/utils";
 
 export async function InventoryTotalsWidget() {
-  const supabase = await createClient();
+  const inventory = createInventoryServiceClient();
 
   const [partsCount, multiLocation, qtyRows] = await Promise.all([
-    supabase.from("parts").select("id", { count: "exact", head: true }),
-    supabase
-      .from("public_inventory")
-      .select("id", { count: "exact", head: true })
-      .gt("variant_count", 1),
-    supabase.from("public_inventory").select("quantity_on_hand"),
+    inventory.from("parts_app_view").select("part_id", { count: "exact", head: true }).eq("active", true),
+    inventory
+      .from("parts_app_view")
+      .select("part_id", { count: "exact", head: true })
+      .eq("active", true)
+      .gt("inventory_location_count", 1),
+    fetchAllRows<{ current_quantity: number | string | null }>((from, to) =>
+      inventory
+        .from("parts_app_view")
+        .select("current_quantity")
+        .eq("active", true)
+        .range(from, to),
+    ),
   ]);
 
-  if (partsCount.error) console.error("failed to count parts", partsCount.error);
+  if (partsCount.error) console.error("failed to count inventory parts", partsCount.error);
   if (multiLocation.error) console.error("failed to count multi-location parts", multiLocation.error);
-  if (qtyRows.error) console.error("failed to sum quantity on hand", qtyRows.error);
+  if (qtyRows.error) console.error("failed to sum inventory quantity", qtyRows.error);
 
-  const totalQty = (qtyRows.data ?? []).reduce(
-    (sum, row) => sum + (typeof row.quantity_on_hand === "number" ? row.quantity_on_hand : 0),
-    0,
-  );
+  const totalQty = qtyRows.data.reduce((sum, row) => {
+    const qty = Number(row.current_quantity ?? 0);
+    return sum + (Number.isFinite(qty) ? qty : 0);
+  }, 0);
 
-  const stats: { label: string; value: number }[] = [
+  const stats = [
     { label: "Distinct parts", value: partsCount.count ?? 0 },
     { label: "Total qty on hand", value: totalQty },
     { label: "Multi-location parts", value: multiLocation.count ?? 0 },
@@ -33,7 +41,7 @@ export async function InventoryTotalsWidget() {
   return (
     <WidgetCard
       title="Inventory totals"
-      description="Master list at a glance"
+      description="SKAPS Spare Parts Inventory"
       icon={<Layers className="h-4 w-4" />}
       href="/admin/inventory"
     >

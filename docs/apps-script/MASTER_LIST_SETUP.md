@@ -1,3 +1,5 @@
+> **Deprecated for the SKAPS inventory cutover:** `/api/ingest-master` is intentionally disabled in the dual-Supabase build. The Athens master sheet must not write inventory after SKAPS Spare Parts Inventory becomes authoritative. Keep this document only as historical reference.
+
 # Master List Apps Script Setup
 
 This guide explains how to connect the "Athens Inventory 2026" Google Sheet to the

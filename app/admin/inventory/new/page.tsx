@@ -18,8 +18,8 @@ export default function NewPartPage() {
         <CardHeader>
           <CardTitle>Add a new part</CardTitle>
           <p className="text-sm text-slate-500">
-            SKAPS numbers have to be unique. Used-form submissions match against
-            this number, so type it carefully.
+            This creates the part directly in SKAPS Spare Parts Inventory. SKAPS numbers must be
+            unique, and the QR identifier is created automatically from the SKAPS number.
           </p>
         </CardHeader>
         <CardContent>

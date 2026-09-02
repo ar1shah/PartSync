@@ -2,7 +2,7 @@ import { Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatNumber } from "@/lib/utils";
 import { getStockStatus } from "@/lib/inventory/stock-status";
-import type { InventoryPart } from "@/lib/supabase/types";
+import type { InventoryPart } from "@/lib/inventory-backend/types";
 
 /** Compact summary card shown in the SKAPS# hover tooltip on the parts-used log. */
 export function PartHoverPreview({ part }: { part: InventoryPart }) {

@@ -120,8 +120,8 @@ export const WIDGET_META: Record<WidgetId, WidgetMeta> = {
     defaultSpan: 3,
   },
   low_stock: {
-    label: "Low stock",
-    description: "Parts at or below their reorder threshold.",
+    label: "Out of stock",
+    description: "Parts with quantity at zero in SKAPS Spare Parts Inventory.",
     icon: <AlertTriangle className="h-4 w-4" />,
     defaultSpan: 1,
   },

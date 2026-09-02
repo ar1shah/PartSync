@@ -1,4 +1,4 @@
-import type { InventoryPart } from "@/lib/supabase/types";
+import type { InventoryPart } from "@/lib/inventory-backend/types";
 
 export type StockTone = "success" | "warning" | "danger";
 

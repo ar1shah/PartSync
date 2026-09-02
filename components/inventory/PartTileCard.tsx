@@ -3,7 +3,7 @@
 import { MapPin, Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatNumber } from "@/lib/utils";
-import type { InventoryPart } from "@/lib/supabase/types";
+import type { InventoryPart } from "@/lib/inventory-backend/types";
 
 interface Props {
   part: InventoryPart;

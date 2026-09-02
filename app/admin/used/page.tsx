@@ -1,5 +1,5 @@
 import { SubmissionsTable } from "@/components/admin/SubmissionsTable";
-import { loadParts } from "@/lib/inventory/load-parts";
+import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
 import { createClient } from "@/lib/supabase/server";
 import type { Submission } from "@/lib/supabase/types";
 
@@ -7,8 +7,6 @@ export const dynamic = "force-dynamic";
 
 async function loadSubmissions(): Promise<Submission[]> {
   const supabase = await createClient();
-  // Cap at 500 for now so the page stays snappy. A future iteration could
-  // paginate or add server-side filtering.
   const { data, error } = await supabase
     .from("submissions")
     .select("*")
@@ -24,9 +22,9 @@ async function loadSubmissions(): Promise<Submission[]> {
 }
 
 export default async function UsedLogPage() {
-  const [submissions, { parts, inventoryParts }] = await Promise.all([
+  const [submissions, inventoryParts] = await Promise.all([
     loadSubmissions(),
-    loadParts(),
+    loadInventoryParts(),
   ]);
 
   return (
@@ -34,7 +32,8 @@ export default async function UsedLogPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Parts used log</h1>
         <p className="mt-1 text-sm text-slate-500">
-          This week&apos;s submissions are shown below. Older entries are grouped by month.
+          This week&apos;s submissions are shown below. SKAPS links resolve against the new inventory
+          database; older entries are grouped by month.
         </p>
       </header>
 
@@ -43,7 +42,6 @@ export default async function UsedLogPage() {
           submissions={submissions}
           formType="used"
           groupByPeriod
-          parts={parts}
           inventoryParts={inventoryParts}
         />
       </div>
