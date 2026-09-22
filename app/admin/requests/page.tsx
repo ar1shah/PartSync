@@ -1,4 +1,5 @@
 import { RequestsListClient } from "./RequestsListClient";
+import { SUBMISSION_LIST_COLUMNS } from "@/lib/supabase/columns";
 import { createClient } from "@/lib/supabase/server";
 import type { Submission } from "@/lib/supabase/types";
 
@@ -8,7 +9,7 @@ async function loadSubmissions(): Promise<Submission[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("submissions")
-    .select("*")
+    .select(SUBMISSION_LIST_COLUMNS)
     .eq("form_type", "request")
     .order("submitted_at", { ascending: false })
     .limit(500);
@@ -17,7 +18,8 @@ async function loadSubmissions(): Promise<Submission[]> {
     console.error("failed to load request submissions", error);
     return [];
   }
-  return data ?? [];
+  // `raw` is intentionally omitted — UI never reads it.
+  return (data ?? []) as unknown as Submission[];
 }
 
 export default async function RequestsLogPage() {

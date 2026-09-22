@@ -16,7 +16,7 @@ export async function loadNotificationsWithRead(
   const [{ data: notifications, error }, { data: reads }] = await Promise.all([
     supabase
       .from("notifications")
-      .select("*")
+      .select("id, created_at, title, body, type, link, read_at")
       .order("created_at", { ascending: false })
       .limit(limit),
     supabase.from("notification_reads").select("notification_id"),

@@ -1,5 +1,7 @@
 import { SubmissionsTable } from "@/components/admin/SubmissionsTable";
-import { loadParts } from "@/lib/inventory/load-parts";
+import { normalizeSkapsNumber } from "@/lib/forms/normalize";
+import { loadPartsForSkaps } from "@/lib/inventory/load-parts";
+import { SUBMISSION_LIST_COLUMNS } from "@/lib/supabase/columns";
 import { createClient } from "@/lib/supabase/server";
 import type { Submission } from "@/lib/supabase/types";
 
@@ -11,7 +13,7 @@ async function loadSubmissions(): Promise<Submission[]> {
   // paginate or add server-side filtering.
   const { data, error } = await supabase
     .from("submissions")
-    .select("*")
+    .select(SUBMISSION_LIST_COLUMNS)
     .eq("form_type", "used")
     .order("submitted_at", { ascending: false })
     .limit(500);
@@ -20,14 +22,18 @@ async function loadSubmissions(): Promise<Submission[]> {
     console.error("failed to load used submissions", error);
     return [];
   }
-  return data ?? [];
+  // `raw` is intentionally omitted from the select — UI never reads it.
+  return (data ?? []) as unknown as Submission[];
 }
 
 export default async function UsedLogPage() {
-  const [submissions, { parts, inventoryParts }] = await Promise.all([
-    loadSubmissions(),
-    loadParts(),
-  ]);
+  const submissions = await loadSubmissions();
+
+  const normalizedKeys = submissions
+    .map((s) => (s.skaps_number ? normalizeSkapsNumber(s.skaps_number) : ""))
+    .filter(Boolean);
+
+  const { parts, inventoryParts } = await loadPartsForSkaps(normalizedKeys);
 
   return (
     <div>

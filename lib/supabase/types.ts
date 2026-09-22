@@ -467,6 +467,10 @@ export type Database = {
           skaps_number: string
         }[]
       }
+      inventory_by_normalized_skaps: {
+        Args: { p_keys: string[] }
+        Returns: Database["public"]["Views"]["public_inventory"]["Row"][]
+      }
       mark_all_notifications_read: { Args: never; Returns: undefined }
       normalize_skaps_number: { Args: { s: string }; Returns: string }
       unread_notification_count: { Args: never; Returns: number }

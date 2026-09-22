@@ -8,11 +8,14 @@ export async function LowStockWidget() {
 
   // Postgres can't compare two columns through PostgREST, so pull the parts
   // that have a threshold set and do the qty <= threshold check in TS.
+  // Bound the scan — we only render the top 3 low-stock rows in the widget,
+  // and filter qty <= threshold in TS because PostgREST can't compare columns.
   const { data, error } = await supabase
     .from("public_inventory")
     .select("id, skaps_number, name, quantity_on_hand, reorder_threshold")
     .not("reorder_threshold", "is", null)
-    .order("quantity_on_hand", { ascending: true });
+    .order("quantity_on_hand", { ascending: true })
+    .limit(200);
 
   if (error) {
     console.error("failed to load low-stock parts", error);

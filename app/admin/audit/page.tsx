@@ -10,7 +10,9 @@ export default async function AuditPage() {
   const [{ data: entries, error }, { data: profiles }] = await Promise.all([
     supabase
       .from("audit_log")
-      .select("*")
+      .select(
+        "id, created_at, actor_id, actor_label, action, entity_type, entity_id, entity_label, summary, changes",
+      )
       .order("created_at", { ascending: false })
       .limit(500),
     supabase.from("profiles").select("id, avatar_url, display_name, first_name, last_name"),
