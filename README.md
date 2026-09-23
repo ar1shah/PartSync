@@ -1,3 +1,5 @@
+
+
 # PartSync
 
 **A production inventory dashboard that turns the SKAPS maintenance team's Google Forms into accurate shelf stock and an admin workflow.**
@@ -6,7 +8,11 @@
 
 ![Status](https://img.shields.io/badge/status-shipped-brightgreen)
 
-![Demo](https://i.imgur.com/QOvFuuv.gif)
+
+
+
+
+![Demo](docs/demo.gif)
 
 **Tech:** TypeScript · Next.js 15 · React 19 · Supabase (Postgres + Auth) · Google Apps Script · Vercel
 
@@ -263,15 +269,27 @@ skaps-inventory/
 
 ### Screenshots
 
+
+
 ![Home](docs/screenshots/home.png)
+
+
 
 ![Admin dashboard](docs/screenshots/admindash.png)
 
+
+
 ![Parts used log](docs/screenshots/partsused.png)
+
+
 
 ![Parts requests](docs/screenshots/partsrequest.png)
 
+
+
 ![Inventory](docs/screenshots/inventory.png)
+
+
 
 **Run it locally**
 
@@ -327,6 +345,8 @@ From `.env.example`:
 ### Tests
 
 No automated `test` script is defined in `package.json`. Use `npm run lint` and `npm run typecheck` for local checks.
+
+
 
 Built for the SKAPS maintenance team and used in production. The repo is public for portfolio context; the live system serves SKAPS staff only.
 
