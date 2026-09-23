@@ -275,15 +275,15 @@ skaps-inventory/
 
 
 
-![Admin dashboard](docs/screenshots/admin-dashboard.png)
+![Admin dashboard](docs/screenshots/admindash.png)
 
 
 
-![Parts used log](docs/screenshots/parts-used.png)
+![Parts used log](docs/screenshots/partsused.png)
 
 
 
-![Parts requests](docs/screenshots/parts-requests.png)
+![Parts requests](docs/screenshots/partsrequest.png)
 
 
 
@@ -352,6 +352,6 @@ Built for the SKAPS maintenance team and used in production. The repo is public 
 
 ---
 
-Ari Shah · [Portfolio](#) · [LinkedIn](#) · [Email](mailto:#)
+Ari Shah · [Portfolio](https://www.ar13.dev/) 
 
 MIT License — see [LICENSE](LICENSE).
