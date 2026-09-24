@@ -8,7 +8,7 @@
 
 </div>
 
-![Demo](https://i.imgur.com/QOvFuuv.gif)
+![Demo](docs/demo.gif)
 
 **Tech:** TypeScript · Next.js 15 · React 19 · Supabase (Postgres, Auth, RLS) · Google Apps Script · Tailwind · Vercel
 
