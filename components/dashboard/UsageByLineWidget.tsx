@@ -16,7 +16,7 @@ export async function UsageByLineWidget() {
 
   const { data, error } = await supabase
     .from("submissions")
-    .select("*")
+    .select("line, quantity")
     .eq("form_type", "used")
     .gte("submitted_at", start.toISOString());
 

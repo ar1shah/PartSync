@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AdminMobileNav } from "@/components/nav/AdminMobileNav";
 import { AdminSidebar } from "@/components/nav/AdminSidebar";
 import { createClient } from "@/lib/supabase/server";
+import { getProfile, getSessionUser } from "@/lib/supabase/session";
 import { cn } from "@/lib/utils";
 import { densityClass, getBackgroundPreset } from "@/lib/dashboard/backgrounds";
 
@@ -10,27 +11,21 @@ export const dynamic = "force-dynamic";
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // Belt-and-suspenders: middleware also redirects, but if someone disables
   // middleware for testing the page itself still won't render unauth'd.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
 
   if (!user) {
     redirect("/login");
   }
 
-  const [{ data: unreadCount }, { data: prefs }, { data: profile }] = await Promise.all([
+  const supabase = await createClient();
+  const [{ data: unreadCount }, { data: prefs }, profile] = await Promise.all([
     supabase.rpc("unread_notification_count"),
     supabase
       .from("user_preferences")
       .select("background, density")
       .eq("user_id", user.id)
       .maybeSingle(),
-    supabase
-      .from("profiles")
-      .select("first_name, last_name, display_name, avatar_url")
-      .eq("id", user.id)
-      .maybeSingle(),
+    getProfile(user.id),
   ]);
 
   const background = getBackgroundPreset(prefs?.background);

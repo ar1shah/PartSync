@@ -1,26 +1,18 @@
-import { createClient } from "@/lib/supabase/server";
 import { Avatar } from "@/components/ui/Avatar";
+import { getProfile, getSessionUser } from "@/lib/supabase/session";
 
 /**
  * Top-of-dashboard greeting. Prefers the optional display name, then the
  * first/last name from `profiles`, falling back to the email username.
  */
 export async function WelcomeHeader() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
 
   let displayName = "there";
   let fullName = "";
   let avatarUrl: string | null = null;
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("first_name, last_name, display_name, avatar_url")
-      .eq("id", user.id)
-      .maybeSingle();
-
+    const profile = await getProfile(user.id);
     avatarUrl = profile?.avatar_url ?? null;
     const first = profile?.first_name?.trim();
     const last = profile?.last_name?.trim();

@@ -14,7 +14,7 @@ export async function MachineAreaWidget() {
 
   const { data, error } = await supabase
     .from("submissions")
-    .select("*")
+    .select("machine_area, quantity")
     .eq("form_type", "used")
     .gte("submitted_at", start.toISOString());
 

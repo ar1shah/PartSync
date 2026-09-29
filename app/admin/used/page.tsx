@@ -1,5 +1,6 @@
 import { SubmissionsTable } from "@/components/admin/SubmissionsTable";
 import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
+import { SUBMISSION_LIST_COLUMNS } from "@/lib/supabase/columns";
 import { createClient } from "@/lib/supabase/server";
 import type { Submission } from "@/lib/supabase/types";
 
@@ -7,9 +8,11 @@ export const dynamic = "force-dynamic";
 
 async function loadSubmissions(): Promise<Submission[]> {
   const supabase = await createClient();
+  // Cap at 500 for now so the page stays snappy. A future iteration could
+  // paginate or add server-side filtering.
   const { data, error } = await supabase
     .from("submissions")
-    .select("*")
+    .select(SUBMISSION_LIST_COLUMNS)
     .eq("form_type", "used")
     .order("submitted_at", { ascending: false })
     .limit(500);
@@ -18,7 +21,8 @@ async function loadSubmissions(): Promise<Submission[]> {
     console.error("failed to load used submissions", error);
     return [];
   }
-  return data ?? [];
+  // `raw` is intentionally omitted from the select — UI never reads it.
+  return (data ?? []) as unknown as Submission[];
 }
 
 export default async function UsedLogPage() {

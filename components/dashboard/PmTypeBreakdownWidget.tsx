@@ -14,7 +14,7 @@ export async function PmTypeBreakdownWidget() {
 
   const { data, error } = await supabase
     .from("submissions")
-    .select("*")
+    .select("pm_type, quantity")
     .eq("form_type", "used")
     .gte("submitted_at", start.toISOString());
 

@@ -1,10 +1,18 @@
-import type { Submission } from "@/lib/supabase/types";
-
 export interface FieldBreakdown {
   label: string;
   count: number;
   quantity: number;
 }
+
+type AggregateField = "pm_type" | "line" | "machine_area";
+
+/** Minimal row shape — widgets only select the grouping column + quantity. */
+type AggregateRow = {
+  quantity: number | null;
+  pm_type?: string | null;
+  line?: string | null;
+  machine_area?: string | null;
+};
 
 /**
  * Groups used-submission rows by a free-text field (e.g. `line` or
@@ -13,8 +21,8 @@ export interface FieldBreakdown {
  * submission count, descending.
  */
 export function groupSubmissionsByField(
-  rows: Submission[],
-  field: "pm_type" | "line" | "machine_area",
+  rows: AggregateRow[],
+  field: AggregateField,
 ): FieldBreakdown[] {
   const map = new Map<string, FieldBreakdown>();
   for (const row of rows) {
