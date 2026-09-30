@@ -8,9 +8,11 @@ import type { InventoryPart } from "@/lib/inventory-backend/types";
 interface Props {
   part: InventoryPart;
   onClick: () => void;
+  pending?: boolean;
+  imageUrl?: string;
 }
 
-export function PartTileCard({ part, onClick }: Props) {
+export function PartTileCard({ part, onClick, pending = false, imageUrl }: Props) {
   const qty = part.quantity_on_hand ?? 0;
   const threshold = part.reorder_threshold;
   const stockTone: "success" | "warning" | "danger" =
@@ -27,22 +29,26 @@ export function PartTileCard({ part, onClick }: Props) {
         : "In stock";
 
   const variantCount = part.variant_count ?? part.variants.length;
+  const photo = imageUrl || part.image_url;
 
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={pending}
+      aria-busy={pending}
       className={cn(
         "group flex w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
         "transition-all duration-150 hover:border-blue-300 hover:shadow-[0_4px_12px_rgba(15,23,42,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600",
+        pending && "opacity-60",
       )}
       aria-label={`View details for ${part.name}`}
     >
       {/* Image area */}
       <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden border-b border-slate-100 bg-slate-50">
-        {part.image_url ? (
+        {photo ? (
           <img
-            src={part.image_url}
+            src={photo}
             alt={part.name ?? ""}
             className="h-full w-full object-contain transition-transform duration-200 group-hover:scale-105"
           />

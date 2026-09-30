@@ -37,3 +37,32 @@ export async function fetchAllRows<T>(
 
   return { data: all, error: null };
 }
+
+/**
+ * Same paging contract as `fetchAllRows`, but issues every range at once.
+ * `totalCount` should come from a `head: true` count on the same filter.
+ */
+export async function fetchAllRowsParallel<T>(
+  fetchPage: (from: number, to: number) => PromiseLike<PageResult<T>>,
+  totalCount: number,
+): Promise<{ data: T[]; error: string | null }> {
+  if (totalCount <= 0) return { data: [], error: null };
+
+  const pageCount = Math.ceil(totalCount / PAGE_SIZE);
+  const pages = await Promise.all(
+    Array.from({ length: pageCount }, (_, index) => {
+      const from = index * PAGE_SIZE;
+      return fetchPage(from, from + PAGE_SIZE - 1);
+    }),
+  );
+
+  const all: T[] = [];
+  for (const page of pages) {
+    if (page.error) {
+      return { data: all, error: page.error.message };
+    }
+    all.push(...(page.data ?? []));
+  }
+
+  return { data: all, error: null };
+}

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Filter, Package, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { normalizeSkapsNumber } from "@/lib/forms/normalize";
+import { getInventoryImageUrls, getInventoryPartDetail } from "@/lib/inventory-backend/detail-action";
 import { PartTileCard } from "./PartTileCard";
 import { PartDetailModal } from "./PartDetailModal";
 import type { InventoryPart } from "@/lib/inventory-backend/types";
@@ -44,6 +45,11 @@ export function InventoryTileGrid({ parts }: Props) {
   const [category, setCategory] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
   const [selected, setSelected] = useState<InventoryPart | null>(null);
+  const [openingId, setOpeningId] = useState<number | null>(null);
+  const openingRef = useRef(false);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const requestedImages = useRef(new Set<number>());
   const [visibleCount, setVisibleCount] = useState(240);
 
   const categories = useMemo(() => {
@@ -65,19 +71,9 @@ export function InventoryTileGrid({ parts }: Props) {
         part.description,
         part.category,
         part.sub_category,
-        ...part.variants.flatMap((v) => [
-          v.lwhsdesc,
-          v.zone,
-          v.location,
-          v.storage_location,
-          v.location_on_machine,
-          v.line_no,
-        ]),
-        part.lwhsdesc,
-        part.zone,
-        part.location,
-        part.storage_location,
+        part.warehouses,
         part.location_on_machine,
+        part.line_no,
       ].filter((v): v is string => Boolean(v));
 
       return {
@@ -130,6 +126,61 @@ export function InventoryTileGrid({ parts }: Props) {
   }, [query, category, stockFilter]);
 
   const visible = filtered.slice(0, visibleCount);
+  const visibleImageKey = useMemo(
+    () =>
+      filtered
+        .slice(0, visibleCount)
+        .filter((part) => part.has_image)
+        .map((part) => part.part_id)
+        .join(","),
+    [filtered, visibleCount],
+  );
+
+  useEffect(() => {
+    const missing = visibleImageKey
+      .split(",")
+      .filter(Boolean)
+      .map(Number)
+      .filter((id) => !requestedImages.current.has(id));
+    if (missing.length === 0) return;
+    for (const id of missing) requestedImages.current.add(id);
+
+    let cancelled = false;
+    void getInventoryImageUrls(missing)
+      .then((urls) => {
+        if (cancelled || Object.keys(urls).length === 0) return;
+        setImageUrls((current) => ({ ...current, ...urls }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        for (const id of missing) requestedImages.current.delete(id);
+      });
+
+    return () => {
+      cancelled = true;
+      for (const id of missing) requestedImages.current.delete(id);
+    };
+  }, [visibleImageKey]);
+
+  async function openPart(part: InventoryPart) {
+    if (openingRef.current) return;
+    openingRef.current = true;
+    setOpenError(null);
+    setOpeningId(part.part_id);
+    try {
+      const result = await getInventoryPartDetail(part.part_id);
+      if ("error" in result) {
+        setOpenError(result.error);
+        return;
+      }
+      setSelected(result.part);
+    } catch {
+      setOpenError("That part could not be loaded.");
+    } finally {
+      openingRef.current = false;
+      setOpeningId(null);
+    }
+  }
 
   return (
     <div>
@@ -184,7 +235,13 @@ export function InventoryTileGrid({ parts }: Props) {
 
       <p className="mt-3 text-xs text-slate-500">
         Showing {filtered.length.toLocaleString()} of {parts.length.toLocaleString()} parts
+        {openingId !== null && <span className="ml-2 text-slate-400">Opening part…</span>}
       </p>
+      {openError && (
+        <p className="mt-2 text-xs text-red-600" role="alert">
+          {openError}
+        </p>
+      )}
 
       {parts.length === 0 ? (
         <EmptyState />
@@ -196,7 +253,9 @@ export function InventoryTileGrid({ parts }: Props) {
             <PartTileCard
               key={part.skaps_number ?? part.name}
               part={part}
-              onClick={() => setSelected(part)}
+              imageUrl={imageUrls[String(part.part_id)]}
+              pending={openingId === part.part_id}
+              onClick={() => void openPart(part)}
             />
           ))}
         </div>
