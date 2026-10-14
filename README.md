@@ -8,10 +8,6 @@
 
 </div>
 
-## Trial quantity mode
-
-All operational inventory quantities in **SKAPS Spare Parts Inventory** are intentionally locked at `0` during the trial period. The database trigger `trg_enforce_trial_zero_inventory_quantity` forces new or updated inventory records back to zero. Raw Datatex staging quantities remain preserved for reference. Remove or disable this trigger only when SKAPS explicitly moves quantity tracking to live production.
-
 ![Demo](docs/demo.gif)
 
 
