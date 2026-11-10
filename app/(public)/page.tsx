@@ -4,37 +4,44 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
 import { createInventoryServiceClient } from "@/lib/inventory-backend/server";
+import { timed } from "@/lib/perf";
 import { formatNumber } from "@/lib/utils";
 
 export const revalidate = 60;
 
 async function loadStats() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  return timed("home.loadStats", async () => {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await timed("home.getUser", () => supabase.auth.getUser());
 
-  if (!user) {
-    return null;
-  }
+    if (!user) {
+      return null;
+    }
 
-  const inventory = createInventoryServiceClient();
-  const [{ count: partsCount }, { count: usedThisWeekCount }] = await Promise.all([
-    inventory
-      .from("parts_app_view")
-      .select("part_id", { count: "exact", head: true })
-      .eq("active", true),
-    supabase
-      .from("submissions")
-      .select("id", { count: "exact", head: true })
-      .eq("form_type", "used")
-      .gte("submitted_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
-  ]);
+    const inventory = createInventoryServiceClient();
+    const [{ count: partsCount }, { count: usedThisWeekCount }] = await Promise.all([
+      timed("home.partsCount", () =>
+        inventory
+          .from("parts_app_view")
+          .select("part_id", { count: "exact", head: true })
+          .eq("active", true),
+      ),
+      timed("home.usedThisWeekCount", () =>
+        supabase
+          .from("submissions")
+          .select("id", { count: "exact", head: true })
+          .eq("form_type", "used")
+          .gte("submitted_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+      ),
+    ]);
 
-  return {
-    parts: partsCount ?? 0,
-    usedThisWeek: usedThisWeekCount ?? 0,
-  };
+    return {
+      parts: partsCount ?? 0,
+      usedThisWeek: usedThisWeekCount ?? 0,
+    };
+  });
 }
 
 export default async function HomePage() {

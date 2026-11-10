@@ -1,5 +1,6 @@
 import { SubmissionsTable } from "@/components/admin/SubmissionsTable";
 import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
+import { logPayloadSize, timed } from "@/lib/perf";
 import { SUBMISSION_LIST_COLUMNS } from "@/lib/supabase/columns";
 import { createClient } from "@/lib/supabase/server";
 import type { Submission } from "@/lib/supabase/types";
@@ -7,27 +8,31 @@ import type { Submission } from "@/lib/supabase/types";
 export const dynamic = "force-dynamic";
 
 async function loadSubmissions(): Promise<Submission[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("submissions")
-    .select(SUBMISSION_LIST_COLUMNS)
-    .eq("form_type", "request")
-    .order("submitted_at", { ascending: false })
-    .limit(500);
+  return timed("requests.loadSubmissions", async () => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("submissions")
+      .select(SUBMISSION_LIST_COLUMNS)
+      .eq("form_type", "request")
+      .order("submitted_at", { ascending: false })
+      .limit(500);
 
-  if (error) {
-    console.error("failed to load request submissions", error);
-    return [];
-  }
-  // `raw` is intentionally omitted — UI never reads it.
-  return (data ?? []) as unknown as Submission[];
+    if (error) {
+      console.error("failed to load request submissions", error);
+      return [];
+    }
+    // `raw` is intentionally omitted — UI never reads it.
+    return (data ?? []) as unknown as Submission[];
+  });
 }
 
 export default async function RequestsLogPage() {
-  const [submissions, inventoryParts] = await Promise.all([
-    loadSubmissions(),
-    loadInventoryParts(),
-  ]);
+  const [submissions, inventoryParts] = await timed("requests.page", () =>
+    Promise.all([loadSubmissions(), loadInventoryParts()]),
+  );
+
+  logPayloadSize("requests.submissions", submissions);
+  logPayloadSize("requests.inventoryParts", inventoryParts);
 
   return (
     <div>

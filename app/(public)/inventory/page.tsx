@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { InventoryTileGrid } from "@/components/inventory/InventoryTileGrid";
 import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
+import { logPayloadSize, timed } from "@/lib/perf";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -17,13 +18,14 @@ export default async function InventoryPage() {
   const supabase = await createClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await timed("inventory.getUser", () => supabase.auth.getUser());
 
   if (!user) {
     redirect("/login?next=/inventory");
   }
 
   const parts = await loadInventoryParts();
+  logPayloadSize("inventory.parts", parts);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14">

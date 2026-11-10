@@ -1,3 +1,4 @@
+import { logPayloadSize, timed } from "@/lib/perf";
 import { fetchAllRows, fetchAllRowsParallel } from "@/lib/supabase/fetch-all";
 import { createInventoryServiceClient } from "./server";
 import type {
@@ -201,32 +202,43 @@ function listQuery(client: ReturnType<typeof createInventoryServiceClient>) {
 
 /** Loads the catalog fields needed for tiles and search. Locations, specs, and images load on open. */
 export async function loadInventoryParts(): Promise<InventoryPart[]> {
-  const client = createInventoryServiceClient();
+  return timed("loadInventoryParts", async () => {
+    const client = createInventoryServiceClient();
 
-  const { count, error: countError } = await client
-    .from("parts_app_view")
-    .select("part_id", { count: "exact", head: true })
-    .eq("active", true);
+    const { count, error: countError } = await timed("loadInventoryParts.count", () =>
+      client
+        .from("parts_app_view")
+        .select("part_id", { count: "exact", head: true })
+        .eq("active", true),
+    );
 
-  const fetched =
-    countError || count == null
-      ? await fetchAllRows<ListRow>((from, to) => listQuery(client).range(from, to))
-      : await fetchAllRowsParallel<ListRow>(
-          (from, to) => listQuery(client).range(from, to),
-          count,
-        );
+    const fetched = await timed("loadInventoryParts.rows", () =>
+      countError || count == null
+        ? fetchAllRows<ListRow>((from, to) => listQuery(client).range(from, to))
+        : fetchAllRowsParallel<ListRow>((from, to) => listQuery(client).range(from, to), count),
+    );
 
-  if (countError) console.error("failed to count SKAPS inventory", countError);
-  if (fetched.error) console.error("failed to load new SKAPS inventory", fetched.error);
+    if (countError) console.error("failed to count SKAPS inventory", countError);
+    if (fetched.error) console.error("failed to load new SKAPS inventory", fetched.error);
 
-  return fetched.data.flatMap((row) => {
-    const part = adaptPart(row, emptyDetail);
-    return part ? [part] : [];
+    logPayloadSize("loadInventoryParts.rows", fetched.data);
+
+    const parts = fetched.data.flatMap((row) => {
+      const part = adaptPart(row, emptyDetail);
+      return part ? [part] : [];
+    });
+
+    logPayloadSize("loadInventoryParts.adapted", parts);
+    return parts;
   });
 }
 
 /** Loads locations, specifications, and one signed image for a single part. */
 export async function loadInventoryPartDetail(partId: number): Promise<InventoryPart | null> {
+  return timed(`loadInventoryPartDetail(${partId})`, () => loadDetail(partId));
+}
+
+async function loadDetail(partId: number): Promise<InventoryPart | null> {
   const client = createInventoryServiceClient();
 
   const [{ data: row, error: partError }, locationsResult] = await Promise.all([
