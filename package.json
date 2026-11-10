@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "import:historical": "tsx supabase/seed/import_historical.ts"
+    "import:historical": "tsx supabase/seed/import_historical.ts",
+    "perf:baseline": "tsx scripts/perf-baseline.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
