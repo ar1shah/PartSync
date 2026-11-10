@@ -30,7 +30,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  WIDGET_IDS,
   WIDGET_META,
   type WidgetId,
   type WidgetPlacement,
@@ -47,9 +46,11 @@ const SPAN_CLASS: Record<WidgetSpan, string> = {
 interface Props {
   initial: WidgetPlacement[];
   nodes: Partial<Record<WidgetId, ReactNode>>;
+  /** Widgets the current role may add from the picker. */
+  allowedIds: WidgetId[];
 }
 
-export function DashboardGrid({ initial, nodes }: Props) {
+export function DashboardGrid({ initial, nodes, allowedIds }: Props) {
   const [editing, setEditing] = useState(false);
   const [placements, setPlacements] = useState<WidgetPlacement[]>(initial);
   const [showPicker, setShowPicker] = useState(false);
@@ -61,8 +62,8 @@ export function DashboardGrid({ initial, nodes }: Props) {
   );
 
   const available = useMemo(
-    () => WIDGET_IDS.filter((id) => !placements.some((p) => p.id === id)),
-    [placements],
+    () => allowedIds.filter((id) => !placements.some((p) => p.id === id)),
+    [allowedIds, placements],
   );
 
   function handleDragEnd(event: DragEndEvent) {

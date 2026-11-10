@@ -1,5 +1,7 @@
 import { Wrench } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentRole } from "@/lib/auth/roles";
+import { can } from "@/lib/auth/permissions";
 import { RepairListClient } from "./RepairListClient";
 import type { PartInRepair } from "@/lib/supabase/types";
 
@@ -16,7 +18,7 @@ async function loadRepairItems(): Promise<PartInRepair[]> {
 }
 
 export default async function RepairPage() {
-  const items = await loadRepairItems();
+  const [items, role] = await Promise.all([loadRepairItems(), getCurrentRole()]);
 
   return (
     <div className="space-y-6">
@@ -30,7 +32,7 @@ export default async function RepairPage() {
         </div>
       </div>
 
-      <RepairListClient items={items} />
+      <RepairListClient items={items} canDelete={can(role, "repair.delete")} />
     </div>
   );
 }

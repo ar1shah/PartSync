@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getSiteUrl } from "@/lib/site-url";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { recordAudit } from "@/lib/audit/log";
+import { requirePermission } from "@/lib/auth/roles";
 
 export interface ActionState {
   ok?: boolean;
@@ -170,20 +171,30 @@ const InviteInput = z.object({
   last_name: z.string().trim().min(1).max(80),
 });
 
-export async function inviteAdmin(
+/**
+ * Admin-only. Invites always create a STAFF account -- there is deliberately
+ * no way to invite or promote an admin from the app. New admins are made by
+ * the developer with supabase/seed/create_user.ts (service role).
+ */
+export async function inviteStaff(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  try {
+    await requirePermission("staff.invite");
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Not allowed" };
+  }
+
   const parsed = InviteInput.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { error: parsed.error.issues.map((i) => i.message).join(", ") };
   }
 
-  // We need the service role to send invites. The signed-in user is
-  // already an admin (middleware gate), so this is safe.
+  // Service role is required to send invites; the caller was checked above.
   const service = createServiceClient();
   const redirectTo = `${getSiteUrl()}/auth/callback?next=/admin/settings`;
-  const { error } = await service.auth.admin.inviteUserByEmail(parsed.data.email, {
+  const { data, error } = await service.auth.admin.inviteUserByEmail(parsed.data.email, {
     redirectTo,
     data: {
       first_name: parsed.data.first_name,
@@ -193,11 +204,24 @@ export async function inviteAdmin(
 
   if (error) return { error: error.message };
 
+  // The auth trigger already creates a staff role row; make sure one exists
+  // without ever overwriting an existing role.
+  if (data.user) {
+    const { error: roleError } = await service
+      .from("user_roles")
+      .upsert(
+        { user_id: data.user.id, role: "staff" },
+        { onConflict: "user_id", ignoreDuplicates: true },
+      );
+    if (roleError) console.error("failed to ensure staff role", roleError);
+  }
+
   await recordAudit({
-    action: "admin.invited",
+    action: "staff.invited",
     entityType: "profile",
+    entityId: data.user?.id ?? null,
     entityLabel: parsed.data.email,
-    summary: `Invited ${parsed.data.first_name} ${parsed.data.last_name} (${parsed.data.email}) as an admin`,
+    summary: `Invited ${parsed.data.first_name} ${parsed.data.last_name} (${parsed.data.email}) as staff`,
   });
 
   return { ok: true };

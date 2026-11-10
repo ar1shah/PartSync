@@ -1,10 +1,12 @@
 import { ScrollText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { requirePagePermission } from "@/lib/auth/roles";
 import { AuditLogClient } from "./AuditLogClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function AuditPage() {
+  await requirePagePermission("audit.view");
   const supabase = await createClient();
 
   const [{ data: entries, error }, { data: profiles }] = await Promise.all([

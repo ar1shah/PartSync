@@ -6,18 +6,22 @@ import { Boxes, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logout } from "@/app/login/actions";
 import { Avatar } from "@/components/ui/Avatar";
-import { adminNavSections, isNavItemActive } from "@/components/nav/admin-nav-config";
+import { isNavItemActive, navSectionsForRole } from "@/components/nav/admin-nav-config";
+import { ROLE_LABELS, type AppRole } from "@/lib/auth/permissions";
 
 export function AdminSidebar({
   unreadCount,
   userName,
   avatarUrl,
+  role,
 }: {
   unreadCount: number;
   userName: string;
   avatarUrl: string | null;
+  role: AppRole;
 }) {
   const pathname = usePathname();
+  const sections = navSectionsForRole(role);
 
   return (
     <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
@@ -29,7 +33,7 @@ export function AdminSidebar({
       </div>
 
       <nav className="flex-1 px-3 py-4">
-        {adminNavSections.map((section, index) => (
+        {sections.map((section, index) => (
           <div key={section.label} className={cn(index > 0 && "mt-5")}>
             <p className="mb-1.5 px-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
               {section.label}
@@ -70,8 +74,9 @@ export function AdminSidebar({
           className="mb-1 flex items-center gap-2.5 rounded-md px-3 py-2 hover:bg-slate-100"
         >
           <Avatar name={userName} src={avatarUrl} size="sm" />
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-700">
-            {userName}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-slate-700">{userName}</span>
+            <span className="block text-xs text-slate-400">{ROLE_LABELS[role]}</span>
           </span>
         </Link>
         <form action={logout}>

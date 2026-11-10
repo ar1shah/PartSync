@@ -17,6 +17,7 @@ type StatusFilter = "in_repair" | "returned" | "all";
 
 interface Props {
   items: PartInRepair[];
+  canDelete: boolean;
 }
 
 function isOverdue(item: PartInRepair): boolean {
@@ -24,7 +25,7 @@ function isOverdue(item: PartInRepair): boolean {
   return new Date(item.expected_return_at) < new Date();
 }
 
-export function RepairListClient({ items }: Props) {
+export function RepairListClient({ items, canDelete }: Props) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("in_repair");
   const [editing, setEditing] = useState<PartInRepair | null>(null);
@@ -235,15 +236,17 @@ export function RepairListClient({ items }: Props) {
                             </button>
                           </>
                         )}
-                        <button
-                          type="button"
-                          title="Delete"
-                          disabled={pending}
-                          onClick={() => handleDelete(item)}
-                          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            title="Delete"
+                            disabled={pending}
+                            onClick={() => handleDelete(item)}
+                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

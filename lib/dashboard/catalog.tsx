@@ -17,6 +17,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { can, type AppRole, type Permission } from "@/lib/auth/permissions";
 
 /**
  * Client-safe dashboard metadata: widget ids, human labels, the default
@@ -62,6 +63,8 @@ interface WidgetMeta {
   description: string;
   icon: ReactNode;
   defaultSpan: WidgetSpan;
+  /** When set, only roles with this permission can see or add the widget. */
+  permission?: Permission;
 }
 
 export const WIDGET_META: Record<WidgetId, WidgetMeta> = {
@@ -172,10 +175,21 @@ export const WIDGET_META: Record<WidgetId, WidgetMeta> = {
     description: "Latest actions from the audit log.",
     icon: <History className="h-4 w-4" />,
     defaultSpan: 2,
+    permission: "audit.view",
   },
 };
 
 export const WIDGET_IDS = Object.keys(WIDGET_META) as WidgetId[];
+
+export function canUseWidget(role: AppRole, id: WidgetId): boolean {
+  const permission = WIDGET_META[id].permission;
+  return !permission || can(role, permission);
+}
+
+/** Widgets the given role is allowed to place on their dashboard. */
+export function widgetIdsForRole(role: AppRole): WidgetId[] {
+  return WIDGET_IDS.filter((id) => canUseWidget(role, id));
+}
 
 function isWidgetId(value: unknown): value is WidgetId {
   return typeof value === "string" && value in WIDGET_META;

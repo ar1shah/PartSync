@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { requirePagePermission } from "@/lib/auth/roles";
 import { NewPartClient } from "./NewPartClient";
 
-export default function NewPartPage() {
+export const dynamic = "force-dynamic";
+
+export default async function NewPartPage() {
+  await requirePagePermission("inventory.create");
   return (
     <div className="mx-auto max-w-2xl">
       <Link

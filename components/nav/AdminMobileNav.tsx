@@ -7,17 +7,19 @@ import { Boxes, LogOut, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logout } from "@/app/login/actions";
 import {
-  adminNavSections,
   getActiveNavLabel,
   isNavItemActive,
+  navSectionsForRole,
 } from "@/components/nav/admin-nav-config";
+import { ROLE_LABELS, type AppRole } from "@/lib/auth/permissions";
 
 /**
  * Mobile-only header + slide-out drawer mirroring AdminSidebar's links.
  * Hidden at lg+ where the desktop sidebar takes over.
  */
-export function AdminMobileNav({ unreadCount }: { unreadCount: number }) {
+export function AdminMobileNav({ unreadCount, role }: { unreadCount: number; role: AppRole }) {
   const pathname = usePathname();
+  const sections = navSectionsForRole(role);
   const [open, setOpen] = useState(false);
 
   // Close the drawer whenever the route changes.
@@ -81,6 +83,9 @@ export function AdminMobileNav({ unreadCount }: { unreadCount: number }) {
               <div className="flex items-center gap-2">
                 <Boxes className="h-5 w-5 text-blue-700" />
                 <span className="text-sm font-semibold text-slate-900">SKAPS Admin</span>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                  {ROLE_LABELS[role]}
+                </span>
               </div>
               <button
                 type="button"
@@ -93,7 +98,7 @@ export function AdminMobileNav({ unreadCount }: { unreadCount: number }) {
             </div>
 
             <nav className="flex-1 overflow-y-auto px-3 py-4">
-              {adminNavSections.map((section, index) => (
+              {sections.map((section, index) => (
                 <div key={section.label} className={cn(index > 0 && "mt-5")}>
                   <p className="mb-1.5 px-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
                     {section.label}

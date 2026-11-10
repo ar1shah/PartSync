@@ -428,6 +428,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          role?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       public_inventory: {
@@ -474,6 +495,7 @@ export type Database = {
         Args: { p_keys: string[] }
         Returns: Database["public"]["Views"]["public_inventory"]["Row"][]
       }
+      is_admin: { Args: never; Returns: boolean }
       mark_all_notifications_read: { Args: never; Returns: undefined }
       normalize_skaps_number: { Args: { s: string }; Returns: string }
       unread_notification_count: { Args: never; Returns: number }
@@ -632,6 +654,8 @@ export type UserPreferencesInsert = Database["public"]["Tables"]["user_preferenc
 
 export type AuditLogEntry = Database["public"]["Tables"]["audit_log"]["Row"];
 export type AuditLogInsert = Database["public"]["Tables"]["audit_log"]["Insert"];
+
+export type UserRoleRow = Database["public"]["Tables"]["user_roles"]["Row"];
 
 export type PublicInventoryRow = Database["public"]["Views"]["public_inventory"]["Row"];
 
