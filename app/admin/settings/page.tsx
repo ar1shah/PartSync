@@ -2,6 +2,7 @@ import { Settings as SettingsIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser, getUserPreferences } from "@/lib/supabase/session";
 import { getRole } from "@/lib/auth/roles";
 import { can } from "@/lib/auth/permissions";
 import { ProfileForm } from "./ProfileForm";
@@ -14,22 +15,17 @@ export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Shared with the admin layout's lookup via React cache.
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: prefs }, role] = await Promise.all([
+  const [{ data: profile }, prefs, role] = await Promise.all([
     supabase
       .from("profiles")
       .select("first_name, last_name, display_name, avatar_url")
       .eq("id", user.id)
       .maybeSingle(),
-    supabase
-      .from("user_preferences")
-      .select("background, density")
-      .eq("user_id", user.id)
-      .maybeSingle(),
+    getUserPreferences(user.id),
     getRole(user.id),
   ]);
   const canInvite = can(role, "staff.invite");

@@ -10,10 +10,16 @@ import { normalizeSkapsNumber } from "@/lib/forms/normalize";
 import { getInventoryImageUrls, getInventoryPartDetail } from "@/lib/inventory-backend/detail-action";
 import { PartTileCard } from "./PartTileCard";
 import { PartDetailModal } from "./PartDetailModal";
+import { decodeListTuples, type ListTuple } from "@/lib/inventory-backend/list-tuple";
 import type { InventoryListPart, InventoryPart } from "@/lib/inventory-backend/types";
 
 interface Props {
-  parts: InventoryListPart[];
+  /**
+   * Compact tuples rather than objects: the repeated field names across
+   * ~10,000 rows cost more than the data itself over the RSC boundary
+   * (4.23MB as objects vs 2.00MB as tuples), and decoding is one cheap pass.
+   */
+  parts: ListTuple[];
 }
 
 type StockFilter = "all" | "in_stock" | "out_of_stock";
@@ -40,7 +46,8 @@ function skapsMatchRank(
   return allTokensInSkaps ? 3 : Number.POSITIVE_INFINITY;
 }
 
-export function InventoryTileGrid({ parts: initialParts }: Props) {
+export function InventoryTileGrid({ parts: initialTuples }: Props) {
+  const initialParts = useMemo(() => decodeListTuples(initialTuples), [initialTuples]);
   const [parts, setParts] = useState(initialParts);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");

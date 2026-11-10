@@ -87,19 +87,22 @@ The catalog lives in its own Supabase project with no browser access at all — 
 
 **Roles in their own table, with no write policies.** Putting `role` on `profiles` would have been the obvious move, but users are allowed to update their own profile row — which would have let anyone promote themselves from the browser. Roles live in `user_roles` instead, which has a read-your-own-row policy and *no* insert, update, or delete policies at all. Granting a role is a service-role operation, so it can only happen from a developer script or the Supabase dashboard. Unrecognized or missing role values fall back to the least privileged role rather than the most.
 
-**Serving a 10k-part catalog without re-deriving it every time.** The catalog view was nested four levels deep, so Postgres rebuilt the whole thing for every query — and four pages each loaded all ~10,000 parts on every render. Flattening the list columns into a materialized view, returning them as one JSON array of arrays rather than objects (repeated field names were most of the payload), and caching that behind a tag that write paths invalidate took the list from ~2.5s and 8.5MB to a cached read that touches the database only after a write or a 5-minute backstop.
+**Serving a 10k-part catalog without re-deriving it every time.** The catalog view was nested four levels deep, so Postgres rebuilt the whole thing for every query — and four pages each loaded all ~10,000 parts on every render. Flattening the list columns into a materialized view and caching the result behind a tag that write paths invalidate took it from ~2.5s to a read that touches the database only after a write or a 5-minute backstop.
+
+**Keeping the list in tuple form all the way to the browser.** With ~10,000 rows, the repeated JSON field names cost more than the data: 4.23MB as objects versus 2.00MB as arrays for identical content. The list stays as arrays across both boundaries — database to server, and server to browser — and is decoded in one pass inside the grid component. Decoding it on the server instead would have given back the entire saving at the point where it matters most, which is exactly the bug this started as.
 
 ## Results
 
 - Replaced the manual spreadsheet reconciliation the maintenance team was doing by hand
 - Running in production and used daily by SKAPS staff
 - Tracks roughly 9,000 parts and over 10,000 form submissions to date
-- Catalog load went from ~2.5s / 8.5MB to ~0.5s / 1.8MB on a cache miss, and no database work at all on a hit
+- Catalog load went from ~2.5s to ~0.5s on a cache miss, and no database work at all on a hit
+- Payload to the browser dropped from 8.5MB to ~2.0MB per inventory page load
 
 ## What's Next
 
 - Finish the Delivered / In transit admin UI. The page exists as a placeholder, and the `status`, `po_number`, and `received_at` fields already exist on `submissions`, so it's UI work rather than schema work.
-- Move auth and submissions into the same region as the catalog. Functions run in `pdx1`, auth is in `us-west-2`, and the catalog is in `us-east-1`, so most pages still cross the country at least once.
+- Consider consolidating regions. Functions run in `pdx1` and auth is in `us-west-2` (same metro, so session checks are cheap), while the catalog sits in `us-east-1`. Now that the catalog is cached, moving the *functions* east would make things worse — the win, if it's worth it, is moving the catalog west to join the other two.
 - Decide whether repair tracking should affect shelf quantity. Right now `parts_in_repair` is intentionally decoupled.
 
 <details>

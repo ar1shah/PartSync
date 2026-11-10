@@ -1,6 +1,7 @@
 import { Layers } from "lucide-react";
 import { WidgetCard } from "./WidgetCard";
-import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
+import { loadInventoryPartTuples } from "@/lib/inventory-backend/load-parts";
+import { summarizeTuples } from "@/lib/inventory-backend/list-tuple";
 import { formatNumber } from "@/lib/utils";
 
 /**
@@ -11,18 +12,12 @@ import { formatNumber } from "@/lib/utils";
  * so on a cache hit this widget costs no database work at all.
  */
 export async function InventoryTotalsWidget() {
-  const parts = await loadInventoryParts();
-
-  const totalQty = parts.reduce((sum, part) => sum + part.quantity_on_hand, 0);
-  const multiLocation = parts.reduce(
-    (count, part) => count + (part.variant_count > 1 ? 1 : 0),
-    0,
-  );
+  const totals = summarizeTuples(await loadInventoryPartTuples());
 
   const stats = [
-    { label: "Distinct parts", value: parts.length },
-    { label: "Total qty on hand", value: totalQty },
-    { label: "Multi-location parts", value: multiLocation },
+    { label: "Distinct parts", value: totals.partsCount },
+    { label: "Total qty on hand", value: totals.totalQuantity },
+    { label: "Multi-location parts", value: totals.multiLocationCount },
   ];
 
   return (

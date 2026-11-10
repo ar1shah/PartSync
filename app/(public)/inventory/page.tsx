@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { InventoryTileGrid } from "@/components/inventory/InventoryTileGrid";
-import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
+import { loadInventoryPartTuples } from "@/lib/inventory-backend/load-parts";
 import { logPayloadSize, timed } from "@/lib/perf";
 import { getSessionUser } from "@/lib/supabase/session";
 
@@ -21,7 +21,7 @@ export default async function InventoryPage() {
     redirect("/login?next=/inventory");
   }
 
-  const parts = await loadInventoryParts();
+  const parts = await loadInventoryPartTuples();
   logPayloadSize("inventory.parts", parts);
 
   return (
