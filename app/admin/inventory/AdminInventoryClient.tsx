@@ -10,22 +10,25 @@ import type { InventoryListPart } from "@/lib/inventory-backend/types";
 
 interface Props {
   inventoryParts: InventoryListPart[];
+  canImport: boolean;
 }
 
-export function AdminInventoryClient({ inventoryParts }: Props) {
+export function AdminInventoryClient({ inventoryParts, canImport }: Props) {
   const router = useRouter();
   const [showImport, setShowImport] = useState(false);
 
   return (
     <>
-      <div className="mb-4 flex justify-end">
-        <Button type="button" variant="outline" onClick={() => setShowImport(true)}>
-          <FileSpreadsheet className="h-4 w-4" />
-          Import Excel
-        </Button>
-      </div>
+      {canImport && (
+        <div className="mb-4 flex justify-end">
+          <Button type="button" variant="outline" onClick={() => setShowImport(true)}>
+            <FileSpreadsheet className="h-4 w-4" />
+            Import Excel
+          </Button>
+        </div>
+      )}
       <InventoryTileGrid parts={inventoryParts} />
-      {showImport && (
+      {canImport && showImport && (
         <ImportExcelModal
           onClose={() => setShowImport(false)}
           onImported={() => {

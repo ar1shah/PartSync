@@ -4,7 +4,13 @@ import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { WidgetSkeleton } from "@/components/admin/AdminSkeletons";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/supabase/session";
-import { parseDashboardLayout, type WidgetId } from "@/lib/dashboard/catalog";
+import {
+  canUseWidget,
+  parseDashboardLayout,
+  widgetIdsForRole,
+  type WidgetId,
+} from "@/lib/dashboard/catalog";
+import { getRole } from "@/lib/auth/roles";
 import { WIDGET_COMPONENTS } from "@/lib/dashboard/widgets";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +27,7 @@ export default async function AdminDashboardPage() {
   const supabase = await createClient();
 
   let layoutRaw: unknown = null;
+  const role = user ? await getRole(user.id) : "staff";
   if (user) {
     const { data: prefs } = await supabase
       .from("user_preferences")
@@ -30,7 +37,10 @@ export default async function AdminDashboardPage() {
     layoutRaw = prefs?.dashboard_layout ?? null;
   }
 
-  const layout = parseDashboardLayout(layoutRaw);
+  const parsed = parseDashboardLayout(layoutRaw);
+  // Drop widgets this role can't see (e.g. Recent activity for staff), even if
+  // they were saved into the layout earlier.
+  const layout = { widgets: parsed.widgets.filter((p) => canUseWidget(role, p.id)) };
 
   // Render only the widgets that are actually placed. Hidden widgets are
   // never instantiated, so they do no database work. Each widget streams
@@ -60,7 +70,11 @@ export default async function AdminDashboardPage() {
       >
         <WelcomeHeader />
       </Suspense>
-      <DashboardGrid initial={layout.widgets} nodes={nodes} />
+      <DashboardGrid
+        initial={layout.widgets}
+        nodes={nodes}
+        allowedIds={widgetIdsForRole(role)}
+      />
     </div>
   );
 }

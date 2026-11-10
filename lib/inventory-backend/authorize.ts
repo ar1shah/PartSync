@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requirePermission } from "@/lib/auth/roles";
 
 /**
  * Inventory service-role operations must always be gated by the existing
@@ -16,5 +17,17 @@ export async function requirePartSyncUser() {
     throw new Error("You must be signed in to perform this inventory action.");
   }
 
+  return user;
+}
+
+/**
+ * Same as requirePartSyncUser, plus a role check against the AUTH project's
+ * user_roles table. Use for inventory writes reserved for admins (new master
+ * parts, Excel quantity imports).
+ */
+export async function requirePartSyncPermission(
+  permission: Parameters<typeof requirePermission>[0],
+) {
+  const { user } = await requirePermission(permission);
   return user;
 }

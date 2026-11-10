@@ -7,12 +7,12 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { inviteAdmin, type ActionState } from "./actions";
+import { inviteStaff, type ActionState } from "./actions";
 
 const INITIAL: ActionState = {};
 
 export function InviteForm() {
-  const [state, formAction] = useActionState(inviteAdmin, INITIAL);
+  const [state, formAction] = useActionState(inviteStaff, INITIAL);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

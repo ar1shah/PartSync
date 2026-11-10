@@ -11,12 +11,15 @@ import {
   Truck,
   Wrench,
 } from "lucide-react";
+import { can, type AppRole, type Permission } from "@/lib/auth/permissions";
 
 export type NavItem = {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
   exact?: boolean;
+  /** When set, only roles with this permission see the item. */
+  permission?: Permission;
 };
 
 export const adminNavSections: { label: string; items: NavItem[] }[] = [
@@ -26,7 +29,7 @@ export const adminNavSections: { label: string; items: NavItem[] }[] = [
       { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
       { href: "/admin/notifications", label: "Notifications", icon: Bell },
       { href: "/admin/reports/yesterday", label: "Yesterday report", icon: CalendarClock },
-      { href: "/admin/audit", label: "Activity log", icon: ScrollText },
+      { href: "/admin/audit", label: "Activity log", icon: ScrollText, permission: "audit.view" },
     ],
   },
   {
@@ -52,6 +55,16 @@ export const adminNavSections: { label: string; items: NavItem[] }[] = [
     ],
   },
 ];
+
+/** Nav sections with items the given role may not use filtered out. */
+export function navSectionsForRole(role: AppRole) {
+  return adminNavSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => !item.permission || can(role, item.permission)),
+    }))
+    .filter((section) => section.items.length > 0);
+}
 
 export function isNavItemActive(item: NavItem, pathname: string) {
   return item.exact ? pathname === item.href : pathname.startsWith(item.href);

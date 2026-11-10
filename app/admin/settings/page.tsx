@@ -2,6 +2,8 @@ import { Settings as SettingsIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
+import { getRole } from "@/lib/auth/roles";
+import { can } from "@/lib/auth/permissions";
 import { ProfileForm } from "./ProfileForm";
 import { PasswordForm } from "./PasswordForm";
 import { InviteForm } from "./InviteForm";
@@ -17,7 +19,7 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: prefs }] = await Promise.all([
+  const [{ data: profile }, { data: prefs }, role] = await Promise.all([
     supabase
       .from("profiles")
       .select("first_name, last_name, display_name, avatar_url")
@@ -28,7 +30,9 @@ export default async function SettingsPage() {
       .select("background, density")
       .eq("user_id", user.id)
       .maybeSingle(),
+    getRole(user.id),
   ]);
+  const canInvite = can(role, "staff.invite");
 
   const density = prefs?.density === "compact" ? "compact" : "comfortable";
 
@@ -40,7 +44,9 @@ export default async function SettingsPage() {
           Settings
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Manage your profile, change your password, and invite other admins.
+          {canInvite
+            ? "Manage your profile, change your password, and invite staff."
+            : "Manage your profile and change your password."}
         </p>
       </header>
 
@@ -82,8 +88,8 @@ export default async function SettingsPage() {
           <CardHeader>
             <CardTitle>Dashboard appearance</CardTitle>
             <p className="text-sm text-slate-500">
-              Pick a background and density. These are yours only -- other
-              admins keep their own look.
+              Pick a background and density. These are yours only -- everyone
+              else keeps their own look.
             </p>
           </CardHeader>
           <CardContent>
@@ -94,18 +100,22 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Invite an admin</CardTitle>
-            <p className="text-sm text-slate-500">
-              Sends an email invite via Supabase. The recipient creates their
-              own password and lands on the dashboard.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <InviteForm />
-          </CardContent>
-        </Card>
+        {canInvite && (
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Invite staff</CardTitle>
+              <p className="text-sm text-slate-500">
+                Sends an email invite via Supabase. The recipient joins as
+                staff, creates their own password and lands on the dashboard.
+                Staff can&apos;t see the activity log, invite anyone, add parts,
+                import Excel, or delete repair entries.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <InviteForm />
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

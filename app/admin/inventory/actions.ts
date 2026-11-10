@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { refreshInventoryPartsCache } from "@/lib/inventory-backend/refresh";
 import { z } from "zod";
 import { createInventoryServiceClient } from "@/lib/inventory-backend/server";
-import { requirePartSyncUser } from "@/lib/inventory-backend/authorize";
+import { requirePartSyncPermission } from "@/lib/inventory-backend/authorize";
 import { recordAudit } from "@/lib/audit/log";
 
 const optionalString = (max: number) =>
@@ -53,7 +53,7 @@ export async function createPart(
 
   const input = parsed.data;
   try {
-    await requirePartSyncUser();
+    await requirePartSyncPermission("inventory.create");
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Unauthorized" };
   }
@@ -232,7 +232,7 @@ export async function importInventoryExcel(input: {
   }
 
   try {
-    await requirePartSyncUser();
+    await requirePartSyncPermission("inventory.import");
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Unauthorized" };
   }

@@ -3,6 +3,7 @@ import { AdminMobileNav } from "@/components/nav/AdminMobileNav";
 import { AdminSidebar } from "@/components/nav/AdminSidebar";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, getSessionUser } from "@/lib/supabase/session";
+import { getRole } from "@/lib/auth/roles";
 import { cn } from "@/lib/utils";
 import { densityClass, getBackgroundPreset } from "@/lib/dashboard/backgrounds";
 
@@ -18,7 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   const supabase = await createClient();
-  const [{ data: unreadCount }, { data: prefs }, profile] = await Promise.all([
+  const [{ data: unreadCount }, { data: prefs }, profile, role] = await Promise.all([
     supabase.rpc("unread_notification_count"),
     supabase
       .from("user_preferences")
@@ -26,6 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       .eq("user_id", user.id)
       .maybeSingle(),
     getProfile(user.id),
+    getRole(user.id),
   ]);
 
   const background = getBackgroundPreset(prefs?.background);
@@ -40,9 +42,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         unreadCount={unreadCount ?? 0}
         userName={userName}
         avatarUrl={profile?.avatar_url ?? null}
+        role={role}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <AdminMobileNav unreadCount={unreadCount ?? 0} />
+        <AdminMobileNav unreadCount={unreadCount ?? 0} role={role} />
         <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-8">{children}</div>
       </div>
     </div>

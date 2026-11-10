@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { recordAudit } from "@/lib/audit/log";
+import { requirePermission } from "@/lib/auth/roles";
 
 async function repairLabel(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -160,11 +161,20 @@ export async function markAsReturned(id: string): Promise<void> {
 }
 
 export async function deleteRepairItem(id: string): Promise<void> {
+  await requirePermission("repair.delete");
   const supabase = await createClient();
   const label = await repairLabel(supabase, id);
-  const { error } = await supabase.from("parts_in_repair").delete().eq("id", id);
+  const { data, error } = await supabase
+    .from("parts_in_repair")
+    .delete()
+    .eq("id", id)
+    .select("id");
   if (error) {
     throw new Error(error.message);
+  }
+  // RLS silently filters a denied delete to zero rows -- don't log it as done.
+  if (!data || data.length === 0) {
+    throw new Error("Repair entry not found or you don't have permission to delete it.");
   }
   await recordAudit({
     action: "repair.deleted",
