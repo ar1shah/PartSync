@@ -1,5 +1,5 @@
 import { SubmissionsTable } from "@/components/admin/SubmissionsTable";
-import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
+import { loadInventoryPartsBySkapsNumbers } from "@/lib/inventory-backend/load-parts";
 import { logPayloadSize, timed } from "@/lib/perf";
 import { SUBMISSION_LIST_COLUMNS } from "@/lib/supabase/columns";
 import { createClient } from "@/lib/supabase/server";
@@ -29,9 +29,14 @@ async function loadSubmissions(): Promise<Submission[]> {
 }
 
 export default async function UsedLogPage() {
-  const [submissions, inventoryParts] = await timed("used.page", () =>
-    Promise.all([loadSubmissions(), loadInventoryParts()]),
-  );
+  // Sequential on purpose: the parts lookup is scoped to the SKAPS numbers
+  // these submissions actually reference, which costs one extra round trip and
+  // saves loading the entire catalog.
+  const [submissions, inventoryParts] = await timed("used.page", async () => {
+    const rows = await loadSubmissions();
+    const parts = await loadInventoryPartsBySkapsNumbers(rows.map((row) => row.skaps_number));
+    return [rows, parts] as const;
+  });
 
   logPayloadSize("used.submissions", submissions);
   logPayloadSize("used.inventoryParts", inventoryParts);

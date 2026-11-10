@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Download, Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ExpenseStatusDot } from "@/components/admin/ExpenseStatusDot";
 import { PartDetailModal } from "@/components/inventory/PartDetailModal";
 import { PartHoverPreview } from "@/components/inventory/PartHoverPreview";
+import { getInventoryPartDetail } from "@/lib/inventory-backend/detail-action";
 import { cn, formatDateTime, formatNumber } from "@/lib/utils";
 import { urgencyTone, normalizeSkapsNumber } from "@/lib/forms/normalize";
 import type { InventoryPart } from "@/lib/inventory-backend/types";
@@ -78,6 +79,9 @@ export function SubmissionsTable({
   const [showNeedsReview, setShowNeedsReview] = useState(false);
   const [requestStatusFilter, setRequestStatusFilter] = useState<RequestStatusFilter>("all");
   const [selectedPart, setSelectedPart] = useState<InventoryPart | null>(null);
+  const [openingPartId, setOpeningPartId] = useState<number | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const openingRef = useRef(false);
 
   // Normalized skaps# -> part, so recognized rows can link to the master
   // part even though `submissions.skaps_number` is free text with no FK.
@@ -98,6 +102,32 @@ export function SubmissionsTable({
     }
     return map;
   }, [inventoryParts]);
+
+  /**
+   * The matched part carries only the few fields the SKAPS lookup returns, so
+   * the modal fetches the full record on open — same approach as
+   * InventoryTileGrid.openPart. Before this, the modal was handed a bare list
+   * row and silently showed no locations, specs, image or "Last Updated".
+   */
+  async function openPart(part: InventoryPart) {
+    if (openingRef.current) return;
+    openingRef.current = true;
+    setOpenError(null);
+    setOpeningPartId(part.part_id);
+    try {
+      const result = await getInventoryPartDetail(part.part_id);
+      if ("error" in result) {
+        setOpenError(result.error);
+        return;
+      }
+      setSelectedPart(result.part);
+    } catch {
+      setOpenError("That part could not be loaded.");
+    } finally {
+      openingRef.current = false;
+      setOpeningPartId(null);
+    }
+  }
 
   const needsReviewCount = useMemo(
     () => submissions.filter((s) => s.status === "needs_review").length,
@@ -275,8 +305,9 @@ export function SubmissionsTable({
                             <TooltipTrigger asChild>
                               <button
                                 type="button"
-                                onClick={() => setSelectedPart(matchedPart)}
-                                className="w-fit font-mono text-xs text-blue-700 underline decoration-dotted decoration-from-font underline-offset-2 hover:text-blue-900"
+                                onClick={() => void openPart(matchedPart)}
+                                disabled={openingPartId === matchedPart.part_id}
+                                className="w-fit font-mono text-xs text-blue-700 underline decoration-dotted decoration-from-font underline-offset-2 hover:text-blue-900 disabled:opacity-60"
                               >
                                 {row.skaps_number}
                               </button>
@@ -431,6 +462,12 @@ export function SubmissionsTable({
           </>
         ) : (
           renderTable(filtered)
+        )}
+
+        {openError && (
+          <p className="mt-2 text-xs text-red-600" role="alert">
+            {openError}
+          </p>
         )}
 
         {selectedPart && (

@@ -1,3 +1,4 @@
+import { normalizeSkapsNumber } from "@/lib/forms/normalize";
 import { logPayloadSize, timed } from "@/lib/perf";
 import { fetchAllRows, fetchAllRowsParallel } from "@/lib/supabase/fetch-all";
 import { createInventoryServiceClient } from "./server";
@@ -229,6 +230,82 @@ export async function loadInventoryParts(): Promise<InventoryPart[]> {
     });
 
     logPayloadSize("loadInventoryParts.adapted", parts);
+    return parts;
+  });
+}
+
+type SkapsLookupRow = {
+  part_id: number | null;
+  skaps_number: string | null;
+  product_name: string | null;
+  main_category: string | null;
+  current_quantity: number | string | null;
+};
+
+/** Builds a full ListRow from the handful of columns the SKAPS lookup returns. */
+function listRowFromLookup(row: SkapsLookupRow): ListRow {
+  return {
+    part_id: row.part_id,
+    skaps_number: row.skaps_number,
+    product_name: row.product_name,
+    product_description: null,
+    location_on_machine: null,
+    line_number: null,
+    main_category: row.main_category,
+    subcategory: null,
+    current_quantity: row.current_quantity,
+    inventory_location_count: null,
+    warehouses: null,
+    qr_code: null,
+    active_rfid_tag_count: null,
+    has_image: null,
+    // parts_list_mv only contains active rows.
+    active: true,
+  };
+}
+
+/**
+ * Loads only the parts whose SKAPS number matches one of `skapsNumbers` after
+ * normalization — what /admin/used and /admin/requests need to turn free-text
+ * `submissions.skaps_number` values into links, instead of loading all ~10k
+ * parts to resolve links for at most 500 rows.
+ *
+ * Matching is unchanged. Normalization uses the same `normalizeSkapsNumber`
+ * the client does, and the RPC returns *every* match including
+ * normalized-key collisions — so `SubmissionsTable`'s existing
+ * drop-on-second-sighting logic still resolves ambiguous keys to no link.
+ */
+export async function loadInventoryPartsBySkapsNumbers(
+  skapsNumbers: Array<string | null | undefined>,
+): Promise<InventoryPart[]> {
+  const keys = Array.from(
+    new Set(
+      skapsNumbers.flatMap((value) => {
+        const normalized = value ? normalizeSkapsNumber(value) : "";
+        return normalized ? [normalized] : [];
+      }),
+    ),
+  );
+
+  if (keys.length === 0) return [];
+
+  return timed(`loadInventoryPartsBySkapsNumbers(${keys.length} keys)`, async () => {
+    const client = createInventoryServiceClient();
+    const { data, error } = await client.rpc("inventory_parts_by_normalized_skaps", {
+      p_keys: keys,
+    });
+
+    if (error) {
+      console.error("failed to load SKAPS parts by number", error);
+      return [];
+    }
+
+    const parts = ((data ?? []) as SkapsLookupRow[]).flatMap((row) => {
+      const part = adaptPart(listRowFromLookup(row), emptyDetail);
+      return part ? [part] : [];
+    });
+
+    logPayloadSize("loadInventoryPartsBySkapsNumbers", parts);
     return parts;
   });
 }
