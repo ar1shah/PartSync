@@ -8,9 +8,9 @@ export async function AwaitingDeliveryWidget() {
 
   const { data, count, error } = await supabase
     .from("submissions")
-    .select("id, skaps_number, part_description, po_number, status", { count: "exact" })
+    .select("id, skaps_number, part_description, po_number, request_status", { count: "exact" })
     .eq("form_type", "request")
-    .in("status", ["ordered", "in_transit"])
+    .eq("request_status", "ordered")
     .order("submitted_at", { ascending: false })
     .limit(3);
 
@@ -21,7 +21,7 @@ export async function AwaitingDeliveryWidget() {
   return (
     <WidgetCard
       title="Awaiting delivery"
-      description="Ordered or in transit"
+      description="Marked ordered in the request sheet"
       icon={<Truck className="h-4 w-4" />}
       href="/admin/requests"
     >
@@ -40,7 +40,7 @@ export async function AwaitingDeliveryWidget() {
                 <span>{row.part_description ?? "(no description)"}</span>
               </span>
               <span className="ml-2 shrink-0 text-slate-400">
-                {row.po_number ? `PO ${row.po_number}` : row.status.replace(/_/g, " ")}
+                {row.po_number ? `PO ${row.po_number}` : (row.request_status ?? "ordered").replace(/_/g, " ")}
               </span>
             </li>
           ))}

@@ -10,7 +10,7 @@ export async function OpenRequestsWidget() {
     .from("submissions")
     .select("id, skaps_number, part_description, submitted_at", { count: "exact" })
     .eq("form_type", "request")
-    .eq("status", "open")
+    .neq("request_status", "ordered")
     .order("submitted_at", { ascending: false })
     .limit(3);
 
@@ -21,7 +21,7 @@ export async function OpenRequestsWidget() {
   return (
     <WidgetCard
       title="Open requests"
-      description="Waiting to be actioned"
+      description="Not yet ordered"
       icon={<ClipboardList className="h-4 w-4" />}
       href="/admin/requests"
     >

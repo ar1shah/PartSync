@@ -139,3 +139,152 @@ export async function deletePart(_id: string): Promise<never> {
     "Imported SKAPS master parts cannot be deleted from PartSync. Deactivate or retire them through the controlled inventory workflow instead.",
   );
 }
+
+const ExcelImportRowSchema = z.object({
+  skaps_number: z.string().trim().min(1).max(120),
+  product_name: z.string().trim().max(300).nullable().optional(),
+  product_description: z.string().trim().max(4000).nullable().optional(),
+  location_on_machine: z.string().trim().max(300).nullable().optional(),
+  line_number: z.string().trim().max(200).nullable().optional(),
+  quantity: z.number().finite().min(0),
+  zone: z.string().trim().max(120).nullable().optional(),
+  location_code: z.string().trim().max(120).nullable().optional(),
+  storage_location: z.string().trim().max(500).nullable().optional(),
+  warehouse_description: z.string().trim().max(300).nullable().optional(),
+  main_category: z.string().trim().max(120).nullable().optional(),
+  subcategory: z.string().trim().max(120).nullable().optional(),
+});
+
+const ExcelImportInput = z.object({
+  fileName: z.string().trim().max(260).optional(),
+  dryRun: z.boolean().optional(),
+  rows: z.array(ExcelImportRowSchema).min(1).max(20000),
+});
+
+export interface InventoryImportCounts {
+  updated: number;
+  unchanged: number;
+  new_locations: number;
+  new_parts: number;
+  skipped: number;
+  import_batch_id: number | null;
+  errors: Array<{ row: number; skaps_number: string | null; error: string }>;
+}
+
+export type InventoryImportResult =
+  | { ok: true; dryRun: boolean; counts: InventoryImportCounts }
+  | { ok: false; error: string };
+
+const CHUNK_SIZE = 500;
+
+function emptyCounts(): InventoryImportCounts {
+  return {
+    updated: 0,
+    unchanged: 0,
+    new_locations: 0,
+    new_parts: 0,
+    skipped: 0,
+    import_batch_id: null,
+    errors: [],
+  };
+}
+
+function mergeCounts(
+  total: InventoryImportCounts,
+  chunk: Partial<InventoryImportCounts> & {
+    errors?: InventoryImportCounts["errors"];
+    import_batch_id?: number | null;
+  },
+  offset: number,
+): void {
+  total.updated += Number(chunk.updated ?? 0);
+  total.unchanged += Number(chunk.unchanged ?? 0);
+  total.new_locations += Number(chunk.new_locations ?? 0);
+  total.new_parts += Number(chunk.new_parts ?? 0);
+  total.skipped += Number(chunk.skipped ?? 0);
+  if (chunk.import_batch_id != null) total.import_batch_id = chunk.import_batch_id;
+  for (const err of chunk.errors ?? []) {
+    total.errors.push({
+      row: Number(err.row) + offset,
+      skaps_number: err.skaps_number ?? null,
+      error: err.error,
+    });
+  }
+}
+
+/**
+ * Preview or apply a FULL-style Excel quantity import against the SKAPS
+ * inventory database. Existing locations not present in the file are left alone.
+ */
+export async function importInventoryExcel(input: {
+  fileName?: string;
+  dryRun?: boolean;
+  rows: unknown[];
+}): Promise<InventoryImportResult> {
+  const parsed = ExcelImportInput.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues.map((i) => i.message).join(", ") || "Invalid import payload",
+    };
+  }
+
+  try {
+    await requirePartSyncUser();
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Unauthorized" };
+  }
+
+  const inventory = createInventoryServiceClient();
+  const dryRun = parsed.data.dryRun === true;
+  const fileName = parsed.data.fileName ?? "excel-import.xlsx";
+  const totals = emptyCounts();
+  let batchId: number | null = null;
+
+  for (let start = 0; start < parsed.data.rows.length; start += CHUNK_SIZE) {
+    const chunk = parsed.data.rows.slice(start, start + CHUNK_SIZE);
+    const rpcResult = await inventory.rpc("apply_inventory_quantity_import", {
+      p_rows: chunk,
+      p_file_name: fileName,
+      p_dry_run: dryRun,
+      p_import_batch_id: batchId,
+    });
+
+    if (rpcResult.error) {
+      console.error("inventory excel import chunk failed", rpcResult.error);
+      return { ok: false, error: rpcResult.error.message };
+    }
+
+    const chunkResult: Partial<InventoryImportCounts> & {
+      import_batch_id?: number | null;
+      errors?: InventoryImportCounts["errors"];
+    } =
+      rpcResult.data && typeof rpcResult.data === "object"
+        ? (rpcResult.data as Partial<InventoryImportCounts> & {
+            import_batch_id?: number | null;
+            errors?: InventoryImportCounts["errors"];
+          })
+        : {};
+    mergeCounts(totals, chunkResult, start);
+    if (chunkResult.import_batch_id != null) batchId = chunkResult.import_batch_id;
+  }
+
+  if (!dryRun) {
+    await recordAudit({
+      action: "inventory.excel_imported",
+      entityType: "part",
+      entityLabel: fileName,
+      summary: `Imported ${parsed.data.rows.length} inventory location rows from ${fileName}`,
+      changes: {
+        file_name: fileName,
+        row_count: parsed.data.rows.length,
+        ...totals,
+        errors: totals.errors.slice(0, 50),
+      },
+    });
+    revalidatePath("/admin/inventory");
+    revalidatePath("/inventory");
+  }
+
+  return { ok: true, dryRun, counts: totals };
+}

@@ -5,10 +5,10 @@ Requests (Responses)** Google Sheet. It handles two things:
 
 1. **Ingest** (`Code.gs`) -- sends every new form submission to
    `/api/ingest`, which writes it to Supabase.
-2. **Color sync** (`ColorSync.gs`) -- watches the manually-applied row
-   colors (green / red / yellow / pink) and sends the expense status to
-   `/api/sync-expense-status`, which the Parts Used log displays as a
-   colored dot.
+2. **Color sync** (`ColorSync.gs`) -- watches manually-applied row colors:
+   - Column **G** (Parts Used) → `expense_status` (green / red / yellow / pink)
+   - Column **H** (Parts Request) → `request_status`
+     (red = not ordered, green = ordered, yellow = under review, blank = pending)
 
 Both files live in the **same** Apps Script project -- a spreadsheet can
 only have one bound project, so this is not a separate script.
@@ -53,51 +53,50 @@ set each once.
 
 1. Make sure the editor has a file named **Code.gs** -- replace its
    contents with `docs/apps-script/Code.gs` from this repository.
-2. Add a new file (**+** next to Files) named **ColorSync** and paste in
+2. Add or update a file named **ColorSync** and paste in
    `docs/apps-script/ColorSync.gs`.
 3. Save (`Ctrl+S` / `Cmd+S`).
 
 ---
 
-## Step 4 -- Calibrate the color map
+## Step 4 -- Calibrate the color maps
 
 The exact hex codes for "green", "red", "yellow", and "pink" depend on
 which swatches were used in the sheet's fill-color picker, so they need to
 be confirmed against the live sheet before color sync is trustworthy.
 
+### Column G (Parts Used / expense)
+
 1. In the function dropdown, select **`logDistinctRowColors`** and click
-   **Run**.
+   **Run** (defaults to column G).
 2. Authorize the script if prompted.
 3. Open **View -> Logs** (or the Executions panel). You'll see every
-   distinct fill color in use, e.g.:
-
-   ```
-   00FF00  (x412, e.g. row 88)
-   FF0000  (x203, e.g. row 91)
-   ```
-
+   distinct fill color in use.
 4. Open `ColorSync.gs` and check each hex code against `COLOR_MAP`. If a
-   code isn't listed (or maps to the wrong status), edit the map, e.g.:
+   code isn't listed (or maps to the wrong status), edit the map.
+
+### Column H (Parts Request / order status)
+
+1. Run **`logDistinctRowColors`** with argument `'H'`. From the editor you
+   can temporarily change the default, or create a one-liner helper:
 
    ```javascript
-   var COLOR_MAP = {
-     '00FF00': 'expensed',
-     'FF0000': 'not_expensed',
-     // ...
-   };
+   function logRequestColors() { logDistinctRowColors('H'); }
    ```
 
-5. Save and re-run `logDistinctRowColors` if you're unsure -- it's
-   read-only and safe to run as many times as you like.
+2. Map red → `not_ordered`, green → `ordered`, yellow → `under_review` in
+   `REQUEST_COLOR_MAP`. Blank/uncolored rows are sent as `pending`.
+
+3. Save and re-run the calibration helpers as needed -- they are read-only.
 
 ---
 
 ## Step 5 -- Backfill existing colored rows
 
-Once the color map is correct, run **`backfillAllRowColors`** once from the
-function dropdown. This scans every row and syncs any that are already
-colored. On a large sheet (thousands of rows) this can take a few minutes
--- let it finish, and consider running it outside business hours.
+Once both color maps are correct, run **`backfillAllRowColors`** once from the
+function dropdown. This scans every row and syncs columns G and H. On a large
+sheet (thousands of rows) this can take a few minutes -- let it finish, and
+consider running it outside business hours.
 
 ---
 
@@ -119,11 +118,12 @@ before, delete them (three-dot menu next to the trigger).
 ## Step 7 -- Verify
 
 1. Run **`manualTest`** -- confirms ingest still works end to end.
-2. Color a test row on the sheet. Within about a minute the dot should
-   appear on that submission in the Parts Used log; if not, wait for the
-   next 30-minute timer run.
-3. Check the Parts Used log: rows flagged "Needs review" should show the
-   badge but keep the normal row background (no more amber tint).
+2. Color a Parts Used test row in column G. Within about a minute the
+   expense dot should appear in the Parts Used log.
+3. Color a Parts Request test row in column H (red / green / yellow, or
+   clear the fill). Confirm the Status badge updates on `/admin/requests`.
+4. If a color change doesn't show immediately, wait for the next 30-minute
+   timer run or manually run `syncRecentRowColors`.
 
 ---
 
@@ -149,8 +149,8 @@ duplicate.
 | `ENDPOINT is not set` / `STATUS_ENDPOINT is not set` in logs | Script property not saved | Re-check Step 2 |
 | HTTP 401 in logs | `SHARED_SECRET` doesn't match `INGEST_SECRET` on Vercel | Match it exactly |
 | "The JavaScript runtime exited unexpectedly" in Executions | Transient Google Apps Script platform crash | Usually self-resolves; check for gaps and use `resyncRow()` if a submission is missing |
-| Row colored but no dot appears in the app | Color not yet mapped, or timer hasn't run yet | Run `logDistinctRowColors` to check the hex code is in `COLOR_MAP`; wait for the 30-minute timer or manually run `syncRecentRowColors` |
-| Dot shows wrong status | Wrong hex mapped in `COLOR_MAP` | Re-run `logDistinctRowColors`, fix the map, re-run `backfillAllRowColors` |
+| Row colored but no status appears in the app | Color not yet mapped, or timer hasn't run yet | Run `logDistinctRowColors` / `logDistinctRowColors('H')`; wait for the 30-minute timer or manually run `syncRecentRowColors` |
+| Status shows wrong value | Wrong hex mapped | Re-calibrate, fix the map, re-run `backfillAllRowColors` |
 
 ---
 
@@ -167,13 +167,13 @@ Supabase submissions table upserted
       |
 Appears in Parts Used / Parts Request log
 
-Row colored manually
+Row colored manually (G and/or H)
       |
 onSheetFormatChange fires (or syncRecentRowColors on its 30-min timer)
       |
-POST /api/sync-expense-status (x-skaps-secret header)
+POST /api/sync-expense-status { rowId, expenseStatus, requestStatus }
       |
-Supabase submissions.expense_status updated
+API writes expense_status for used rows, request_status for request rows
       |
-Colored dot appears next to the row in the Parts Used log
+Dots / status badges update in the admin logs
 ```

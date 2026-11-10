@@ -2,21 +2,29 @@
  * SKAPS Parts Inventory -- Row color sync.
  *
  * Staff manually color rows on the "Maintenance Parts Requests (Responses)"
- * sheet to mark expense status:
+ * sheet. Two columns are watched:
  *
- *   green      -- expensed out
- *   bright red -- not expensed out (needs review)
- *   yellow     -- check inventory / stock balance
- *   pink       -- already shows 0 on Datatex (not tracked in software)
+ *   Column G (Parts Used expense status):
+ *     green      -- expensed out
+ *     bright red -- not expensed out (needs review)
+ *     yellow     -- check inventory / stock balance
+ *     pink       -- already shows 0 on Datatex (not tracked in software)
  *
- * This file reads column G's row background color (always filled when a row
- * is marked) and POSTs the mapped status to /api/sync-expense-status, which
- * stores it on the matching `submissions` row (matched by the same rowId
- * used by Code.gs).
+ *   Column H (Parts Request order status):
+ *     red        -- not ordered
+ *     green      -- ordered
+ *     yellow     -- under review
+ *     no fill    -- pending
+ *
+ * This file reads those fill colors and POSTs the mapped statuses to
+ * /api/sync-expense-status, which stores them on the matching `submissions`
+ * row (matched by the same rowId used by Code.gs). The API writes
+ * expense_status only for form_type=used and request_status only for
+ * form_type=request.
  *
  * SETUP: See SETUP.md in the same folder. In short:
- *   1. Run logDistinctRowColors() once and adjust COLOR_MAP below to match
- *      the hex codes actually used in your sheet.
+ *   1. Run logDistinctRowColors() once and adjust COLOR_MAP / REQUEST_COLOR_MAP
+ *      below to match the hex codes actually used in your sheet.
  *   2. Run backfillAllRowColors() once to sync existing colored rows.
  *   3. Install the onSheetFormatChange trigger (On change) and the
  *      syncRecentRowColors trigger (time-driven, every 30 minutes).
@@ -33,6 +41,9 @@ var STATUS_ENDPOINT = PropertiesService.getScriptProperties().getProperty('STATU
 
 /** Column whose row fill color reflects expense status (G = 7). */
 var COLOR_COLUMN = 7;
+
+/** Column whose row fill color reflects parts-request status (H = 8). */
+var REQUEST_COLOR_COLUMN = 8;
 
 /**
  * Hex fill color -> expense status. Keys are UPPERCASE hex without '#'.
@@ -54,6 +65,23 @@ var COLOR_MAP = {
   'E06666': 'datatex_zero',
   'EA9999': 'datatex_zero',
   '0000FF': 'testing'           // blue -- test rows, not a real expense status
+};
+
+/**
+ * Hex fill color -> request_status. Blank/uncolored maps to 'pending'.
+ * Calibrate against column H with logDistinctRowColors('H').
+ */
+var REQUEST_COLOR_MAP = {
+  'FF0000': 'not_ordered',      // red -- not ordered
+  'CC0000': 'not_ordered',
+  'E06666': 'not_ordered',
+  'EA9999': 'not_ordered',
+  '00FF00': 'ordered',          // green -- ordered
+  '38761D': 'ordered',
+  '93C47D': 'ordered',
+  'FFFF00': 'under_review',     // yellow -- under review
+  'FFD966': 'under_review',
+  'FFF2CC': 'under_review'
 };
 
 /** Backgrounds that mean "uncolored" -- never mapped to a status. */
@@ -110,8 +138,8 @@ function syncRecentRowColors() {
 }
 
 // ---------------------------------------------------------------------------
-// One-time backfill -- syncs every colored row in the sheet. Can take a
-// while on a large sheet; run manually once, ideally off-hours.
+// One-time backfill -- syncs every colored/request row in the sheet. Can take
+// a while on a large sheet; run manually once, ideally off-hours.
 // ---------------------------------------------------------------------------
 function backfillAllRowColors() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
@@ -127,24 +155,21 @@ function backfillAllRowColors() {
     return;
   }
 
-  Logger.log('backfillAllRowColors: scanning rows ' + startRow + '-' + lastRow + ' (column G)...');
+  Logger.log('backfillAllRowColors: scanning rows ' + startRow + '-' + lastRow + ' (columns G + H)...');
   var synced = 0;
   for (var rowNumber = startRow; rowNumber <= lastRow; rowNumber++) {
-    var status = detectExpenseStatus(sheet, rowNumber);
-    if (status) {
-      syncRowColor(sheet, rowNumber);
-      synced++;
-    }
+    syncRowColor(sheet, rowNumber);
+    synced++;
   }
-  Logger.log('backfillAllRowColors: done. Synced ' + synced + ' colored rows out of ' + (lastRow - startRow + 1) + ' scanned.');
+  Logger.log('backfillAllRowColors: done. Synced ' + synced + ' rows out of ' + (lastRow - startRow + 1) + ' scanned.');
 }
 
 // ---------------------------------------------------------------------------
 // Calibration helper -- run once against the live sheet and check the
-// Executions log to see every distinct fill color in column G. Colors
-// already in COLOR_MAP are marked "mapped"; add any "UNMAPPED" ones.
+// Executions log to see every distinct fill color. Pass 'G' or 'H' (default G).
+// Colors already in the matching map are marked "mapped"; add any "UNMAPPED".
 // ---------------------------------------------------------------------------
-function logDistinctRowColors() {
+function logDistinctRowColors(columnLetter) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) {
@@ -152,7 +177,11 @@ function logDistinctRowColors() {
     return;
   }
 
-  var backgrounds = sheet.getRange(2, COLOR_COLUMN, lastRow - 1, 1).getBackgrounds();
+  var letter = (columnLetter || 'G').toString().toUpperCase();
+  var column = letter === 'H' ? REQUEST_COLOR_COLUMN : COLOR_COLUMN;
+  var map = letter === 'H' ? REQUEST_COLOR_MAP : COLOR_MAP;
+
+  var backgrounds = sheet.getRange(2, column, lastRow - 1, 1).getBackgrounds();
   var seen = {};
   for (var i = 0; i < backgrounds.length; i++) {
     var color = backgrounds[i][0];
@@ -164,44 +193,52 @@ function logDistinctRowColors() {
     seen[key].count++;
   }
 
-  Logger.log('Distinct non-blank colors in column G:');
+  Logger.log('Distinct non-blank colors in column ' + letter + ':');
   var unmapped = 0;
   for (var hex in seen) {
     var mapKey = hex.replace('#', '').toUpperCase();
-    var status = COLOR_MAP[mapKey];
-    var tag = status ? 'mapped -> ' + status : 'UNMAPPED -- add to COLOR_MAP';
+    var status = map[mapKey];
+    var tag = status ? 'mapped -> ' + status : 'UNMAPPED -- add to map';
     if (!status) unmapped++;
     Logger.log(hex + '  (x' + seen[hex].count + ', e.g. row ' + seen[hex].exampleRow + ')  ' + tag);
   }
   if (unmapped === 0) {
     Logger.log('All colors above are mapped. You can run backfillAllRowColors().');
   } else {
-    Logger.log(unmapped + ' unmapped color(s) -- add them to COLOR_MAP (hex without #).');
+    Logger.log(unmapped + ' unmapped color(s) -- add them to the map (hex without #).');
   }
 }
 
 // ---------------------------------------------------------------------------
-// Core: detect a row's expense status from its fill color and POST it.
+// Core: detect expense + request status from fill colors and POST them.
 // ---------------------------------------------------------------------------
 function syncRowColor(sheet, rowNumber) {
-  var status = detectExpenseStatus(sheet, rowNumber);
+  var expenseStatus = detectMappedStatus(sheet, rowNumber, COLOR_COLUMN, COLOR_MAP);
+  var requestStatus = detectMappedStatus(sheet, rowNumber, REQUEST_COLOR_COLUMN, REQUEST_COLOR_MAP);
+  // Blank request highlight means pending (explicitly sent, not skipped).
+  if (!requestStatus) requestStatus = 'pending';
+
   var rowId = 'sheet-' + sheet.getSheetId() + '-row-' + rowNumber;
 
   if (DEBUG) {
-    Logger.log('syncRowColor: ' + rowId + ' -> ' + (status || 'null (uncolored)'));
+    Logger.log(
+      'syncRowColor: ' + rowId +
+      ' expense=' + (expenseStatus || 'null') +
+      ' request=' + requestStatus
+    );
   }
 
-  postExpenseStatus(rowId, status);
+  postColorStatus(rowId, expenseStatus, requestStatus);
 }
 
-function detectExpenseStatus(sheet, rowNumber) {
-  var color = sheet.getRange(rowNumber, COLOR_COLUMN).getBackground();
+function detectMappedStatus(sheet, rowNumber, column, map) {
+  var color = sheet.getRange(rowNumber, column).getBackground();
   if (isBlank(color)) return null;
 
   var key = color.replace('#', '').toUpperCase();
-  var status = COLOR_MAP[key];
+  var status = map[key];
   if (!status && DEBUG) {
-    Logger.log('Unmapped row color ' + color + ' on row ' + rowNumber + ' col G -- add it to COLOR_MAP.');
+    Logger.log('Unmapped row color ' + color + ' on row ' + rowNumber + ' col ' + column + ' -- add it to the map.');
   }
   return status || null;
 }
@@ -214,7 +251,7 @@ function isBlank(color) {
   return false;
 }
 
-function postExpenseStatus(rowId, status) {
+function postColorStatus(rowId, expenseStatus, requestStatus) {
   if (!STATUS_ENDPOINT) {
     Logger.log('ERROR: STATUS_ENDPOINT is not set. See SETUP.md.');
     return;
@@ -229,7 +266,11 @@ function postExpenseStatus(rowId, status) {
       method: 'post',
       contentType: 'application/json',
       headers: { 'x-skaps-secret': SHARED_SECRET },
-      payload: JSON.stringify({ rowId: rowId, expenseStatus: status }),
+      payload: JSON.stringify({
+        rowId: rowId,
+        expenseStatus: expenseStatus,
+        requestStatus: requestStatus
+      }),
       muteHttpExceptions: true
     });
 

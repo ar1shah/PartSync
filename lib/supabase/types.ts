@@ -352,6 +352,7 @@ export type Database = {
           quantity: number | null
           raw: Json
           received_at: string | null
+          request_status: string
           skaps_number: string | null
           status: string
           submitted_at: string
@@ -373,6 +374,7 @@ export type Database = {
           quantity?: number | null
           raw: Json
           received_at?: string | null
+          request_status?: string
           skaps_number?: string | null
           status?: string
           submitted_at: string
@@ -394,6 +396,7 @@ export type Database = {
           quantity?: number | null
           raw?: Json
           received_at?: string | null
+          request_status?: string
           skaps_number?: string | null
           status?: string
           submitted_at?: string

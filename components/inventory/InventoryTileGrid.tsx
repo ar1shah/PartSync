@@ -40,7 +40,8 @@ function skapsMatchRank(
   return allTokensInSkaps ? 3 : Number.POSITIVE_INFINITY;
 }
 
-export function InventoryTileGrid({ parts }: Props) {
+export function InventoryTileGrid({ parts: initialParts }: Props) {
+  const [parts, setParts] = useState(initialParts);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
@@ -51,6 +52,10 @@ export function InventoryTileGrid({ parts }: Props) {
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const requestedImages = useRef(new Set<number>());
   const [visibleCount, setVisibleCount] = useState(240);
+
+  useEffect(() => {
+    setParts(initialParts);
+  }, [initialParts]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -182,6 +187,20 @@ export function InventoryTileGrid({ parts }: Props) {
     }
   }
 
+  function handleImageChange(partId: number, imageUrl: string) {
+    setImageUrls((current) => ({ ...current, [String(partId)]: imageUrl }));
+    setParts((current) =>
+      current.map((part) =>
+        part.part_id === partId ? { ...part, has_image: true, image_url: imageUrl } : part,
+      ),
+    );
+    setSelected((current) =>
+      current && current.part_id === partId
+        ? { ...current, has_image: true, image_url: imageUrl }
+        : current,
+    );
+  }
+
   return (
     <div>
       {/* Filter bar */}
@@ -269,7 +288,13 @@ export function InventoryTileGrid({ parts }: Props) {
         </div>
       )}
 
-      {selected && <PartDetailModal part={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <PartDetailModal
+          part={selected}
+          onClose={() => setSelected(null)}
+          onImageChange={handleImageChange}
+        />
+      )}
     </div>
   );
 }

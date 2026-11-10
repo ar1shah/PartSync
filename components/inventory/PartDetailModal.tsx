@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { MapPin, Package, QrCode, Radio, X } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { ImagePlus, Loader2, MapPin, Package, QrCode, Radio, Upload, X } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn, formatNumber, formatDate } from "@/lib/utils";
 import { getStockStatus } from "@/lib/inventory/stock-status";
+import { uploadPartImage } from "@/lib/inventory-backend/detail-action";
 import type {
   InventoryLocation,
   InventoryPart,
@@ -14,7 +17,11 @@ import type {
 interface Props {
   part: InventoryPart;
   onClose: () => void;
+  onImageChange?: (partId: number, imageUrl: string) => void;
 }
+
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 
 function DetailField({
   label,
@@ -53,16 +60,59 @@ function SpecificationRow({ spec }: { spec: InventorySpecification }) {
   );
 }
 
-export function PartDetailModal({ part, onClose }: Props) {
+export function PartDetailModal({ part, onClose, onImageChange }: Props) {
   const qty = part.quantity_on_hand ?? 0;
   const { tone: stockTone, label: stockLabel } = getStockStatus(part);
   const variants = part.variants;
   const hasVariants = variants.length > 0;
   const [activeIdx, setActiveIdx] = useState(0);
+  const [imageUrl, setImageUrl] = useState(part.image_url);
+  const [dragOver, setDragOver] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadRef = useRef<(file: File) => void>(() => {});
 
   const activeLocation: InventoryLocation | null = hasVariants
     ? (variants[activeIdx] ?? variants[0] ?? null)
     : null;
+
+  function handleImageFile(file: File) {
+    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+      toast.error("Image must be JPEG, PNG, or WebP.");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.error("Image must be 15 MB or smaller.");
+      return;
+    }
+
+    const localPreview = URL.createObjectURL(file);
+    setImageUrl(localPreview);
+
+    const formData = new FormData();
+    formData.set("skaps_number", part.skaps_number);
+    formData.set("part_id", String(part.part_id));
+    formData.set("image", file);
+
+    startTransition(async () => {
+      const result = await uploadPartImage(formData);
+      URL.revokeObjectURL(localPreview);
+      if (!result.ok) {
+        toast.error(result.error);
+        setImageUrl(part.image_url);
+        return;
+      }
+      setImageUrl(result.imageUrl);
+      onImageChange?.(part.part_id, result.imageUrl);
+      toast.success("Image saved");
+    });
+  }
+
+  uploadRef.current = handleImageFile;
+
+  useEffect(() => {
+    setImageUrl(part.image_url);
+  }, [part.image_url, part.part_id]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -75,6 +125,24 @@ export function PartDetailModal({ part, onClose }: Props) {
       document.body.style.overflow = "";
     };
   }, [onClose]);
+
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (!item.type.startsWith("image/")) continue;
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          uploadRef.current(file);
+          return;
+        }
+      }
+    }
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, []);
 
   return (
     <div
@@ -100,15 +168,36 @@ export function PartDetailModal({ part, onClose }: Props) {
 
         <div className="overflow-y-auto">
           <div className="flex gap-5 border-b border-slate-100 p-5">
-            <div className="flex h-32 w-32 flex-shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50">
-              {part.image_url ? (
+            <div
+              className={cn(
+                "relative flex h-32 w-32 flex-shrink-0 flex-col items-center justify-center overflow-hidden rounded-lg border border-dashed bg-slate-50 transition-colors",
+                dragOver ? "border-blue-500 bg-blue-50" : "border-slate-200",
+              )}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) handleImageFile(file);
+              }}
+            >
+              {imageUrl ? (
                 <img
-                  src={part.image_url}
+                  src={imageUrl}
                   alt={part.name}
                   className="h-full w-full rounded-lg object-contain"
                 />
               ) : (
                 <Package className="h-12 w-12 text-slate-300" />
+              )}
+              {pending && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-white/70">
+                  <Loader2 className="h-5 w-5 animate-spin text-blue-700" />
+                </div>
               )}
             </div>
 
@@ -127,6 +216,38 @@ export function PartDetailModal({ part, onClose }: Props) {
                 </span>
                 {part.category && <Badge tone="accent">{part.category}</Badge>}
                 {part.sub_category && <Badge tone="neutral">{part.sub_category}</Badge>}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageFile(file);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={pending}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {pending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : imageUrl ? (
+                    <ImagePlus className="h-4 w-4" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
+                  {imageUrl ? "Replace image" : "Add image"}
+                </Button>
+                <span className="text-xs text-slate-400">
+                  Drop a file, browse, or paste (Ctrl+V)
+                </span>
               </div>
             </div>
           </div>
@@ -231,7 +352,7 @@ export function PartDetailModal({ part, onClose }: Props) {
             <div className="mt-6 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
               Master identity fields are controlled by the SKAPS inventory database. Zone, Location,
               and LWhsDesc changes should use the controlled Location Refresh workflow rather than
-              editing imported Datatex records directly.
+              editing imported Datatex records directly. Quantities are updated via Excel import.
             </div>
           </div>
         </div>
