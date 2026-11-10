@@ -1,28 +1,17 @@
 import { AlertTriangle } from "lucide-react";
 import { WidgetCard } from "./WidgetCard";
-import { createInventoryServiceClient } from "@/lib/inventory-backend/server";
+import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
 import { formatNumber } from "@/lib/utils";
 
+/**
+ * Derived from the cached catalog list rather than its own count + sample
+ * queries against parts_app_view. The list already arrives sorted by
+ * skaps_number, which is the order the sample used.
+ */
 export async function LowStockWidget() {
-  const inventory = createInventoryServiceClient();
-
-  const [{ count, error: countError }, { data, error }] = await Promise.all([
-    inventory
-      .from("parts_app_view")
-      .select("part_id", { count: "exact", head: true })
-      .eq("active", true)
-      .lte("current_quantity", 0),
-    inventory
-      .from("parts_app_view")
-      .select("part_id,skaps_number,product_name,current_quantity")
-      .eq("active", true)
-      .lte("current_quantity", 0)
-      .order("skaps_number", { ascending: true })
-      .limit(3),
-  ]);
-
-  if (countError) console.error("failed to count zero-stock parts", countError);
-  if (error) console.error("failed to load zero-stock sample", error);
+  const parts = await loadInventoryParts();
+  const zeroStock = parts.filter((part) => part.quantity_on_hand <= 0);
+  const sample = zeroStock.slice(0, 3);
 
   return (
     <WidgetCard
@@ -32,17 +21,17 @@ export async function LowStockWidget() {
       href="/admin/inventory"
     >
       <div className="flex items-baseline gap-3">
-        <span className="text-3xl font-semibold text-slate-900">{formatNumber(count ?? 0)}</span>
+        <span className="text-3xl font-semibold text-slate-900">{formatNumber(zeroStock.length)}</span>
         <span className="text-xs text-slate-500">parts at zero</span>
       </div>
 
-      {(data ?? []).length > 0 && (
+      {sample.length > 0 && (
         <ul className="mt-3 space-y-1.5">
-          {(data ?? []).map((p) => (
-            <li key={p.part_id} className="text-xs text-slate-600">
-              <span className="font-mono text-slate-500">{p.skaps_number ?? "?"}</span>
+          {sample.map((part) => (
+            <li key={part.part_id} className="text-xs text-slate-600">
+              <span className="font-mono text-slate-500">{part.skaps_number}</span>
               <span className="mx-1.5 text-slate-300">&middot;</span>
-              <span>{p.product_name ?? "(unnamed)"}</span>
+              <span>{part.name}</span>
             </li>
           ))}
         </ul>

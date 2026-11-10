@@ -3,10 +3,10 @@
 import { MapPin, Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatNumber } from "@/lib/utils";
-import type { InventoryPart } from "@/lib/inventory-backend/types";
+import type { InventoryListPart } from "@/lib/inventory-backend/types";
 
 interface Props {
-  part: InventoryPart;
+  part: InventoryListPart;
   onClick: () => void;
   pending?: boolean;
   imageUrl?: string;
@@ -28,7 +28,7 @@ export function PartTileCard({ part, onClick, pending = false, imageUrl }: Props
         ? "Low stock"
         : "In stock";
 
-  const variantCount = part.variant_count ?? part.variants.length;
+  const variantCount = part.variant_count;
   const photo = imageUrl || part.image_url;
 
   return (

@@ -1,9 +1,11 @@
-import type { InventoryPart } from "@/lib/inventory-backend/types";
+import type { InventoryListPart, InventoryPart } from "@/lib/inventory-backend/types";
 
 export type StockTone = "success" | "warning" | "danger";
 
 /** Shared stock tone/label logic so the detail modal and hover preview agree. */
-export function getStockStatus(part: InventoryPart): { tone: StockTone; label: string } {
+export function getStockStatus(
+  part: Pick<InventoryPart | InventoryListPart, "quantity_on_hand" | "reorder_threshold">,
+): { tone: StockTone; label: string } {
   const qty = part.quantity_on_hand ?? 0;
   const threshold = part.reorder_threshold;
 

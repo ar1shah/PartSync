@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { refreshInventoryPartsCache } from "@/lib/inventory-backend/refresh";
 import { z } from "zod";
 import { createInventoryServiceClient } from "@/lib/inventory-backend/server";
 import { requirePartSyncUser } from "@/lib/inventory-backend/authorize";
@@ -113,6 +114,7 @@ export async function createPart(
     },
   });
 
+  await refreshInventoryPartsCache();
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
   return { ok: true };
@@ -282,6 +284,8 @@ export async function importInventoryExcel(input: {
         errors: totals.errors.slice(0, 50),
       },
     });
+    // Once, after the last chunk -- not per chunk.
+    await refreshInventoryPartsCache();
     revalidatePath("/admin/inventory");
     revalidatePath("/inventory");
   }

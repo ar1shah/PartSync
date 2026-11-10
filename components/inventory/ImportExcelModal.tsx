@@ -3,7 +3,6 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { formatNumber } from "@/lib/utils";
 import {
@@ -96,6 +95,7 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
 
     try {
       const buffer = await file.arrayBuffer();
+      const XLSX = await import("xlsx");
       const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
       const matrices = workbook.SheetNames.map((name) => ({
         name,

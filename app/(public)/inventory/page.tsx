@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { InventoryTileGrid } from "@/components/inventory/InventoryTileGrid";
 import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
-import { createClient } from "@/lib/supabase/server";
+import { logPayloadSize, timed } from "@/lib/perf";
+import { getSessionUser } from "@/lib/supabase/session";
 
 export const metadata: Metadata = {
   title: "Inventory",
@@ -14,16 +15,14 @@ export const revalidate = 30;
 export default async function InventoryPage() {
   // Auth remains on the existing PartSync Supabase project during the first
   // cutover phase. Inventory data comes from the new project server-side.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await timed("inventory.getUser", () => getSessionUser());
 
   if (!user) {
     redirect("/login?next=/inventory");
   }
 
   const parts = await loadInventoryParts();
+  logPayloadSize("inventory.parts", parts);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14">

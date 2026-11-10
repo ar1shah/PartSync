@@ -2,7 +2,6 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { Camera, CameraOff, Package, QrCode, Radio } from "lucide-react";
-import { BrowserQRCodeReader } from "@zxing/browser";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -55,7 +54,7 @@ export function ScanClient() {
     scanHandledRef.current = false;
 
     try {
-      const reader = new BrowserQRCodeReader();
+      const reader = new (await import("@zxing/browser")).BrowserQRCodeReader();
 
       const controls = await reader.decodeFromConstraints(
         {

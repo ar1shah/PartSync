@@ -2,12 +2,14 @@ import Link from "next/link";
 import { Plus, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
+import { logPayloadSize } from "@/lib/perf";
 import { AdminInventoryClient } from "./AdminInventoryClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminInventoryPage() {
   const inventoryParts = await loadInventoryParts();
+  logPayloadSize("admin.inventory.parts", inventoryParts);
 
   return (
     <div>

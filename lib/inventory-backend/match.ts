@@ -1,5 +1,5 @@
 import { normalizeSkapsNumber } from "@/lib/forms/normalize";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { timed } from "@/lib/perf";
 import { createInventoryServiceClient } from "./server";
 import type { InventoryLookupRow } from "./types";
 
@@ -21,8 +21,14 @@ function adapt(row: LookupRow): InventoryLookupRow | null {
 
 /**
  * Resolve a form-entered SKAPS number against the new inventory backend.
- * Exact/case-insensitive lookups stay cheap. The full normalized scan is only
- * used for legacy free-text variants such as `insert 164` vs `INSERT_164`.
+ *
+ * Exact/case-insensitive lookups stay cheap. The normalized lookup handles
+ * legacy free-text variants such as `insert 164` vs `INSERT_164`, and is an
+ * index scan on parts_list_mv rather than the full-catalog scan this used to
+ * do on every unmatched submission.
+ *
+ * Semantics are unchanged: a normalized key that matches more than one part
+ * resolves to null rather than guessing.
  */
 export async function findInventoryPartBySkapsNumber(
   submittedSkaps: string,
@@ -40,21 +46,26 @@ export async function findInventoryPartBySkapsNumber(
   const normalized = normalizeSkapsNumber(submittedSkaps);
   if (!normalized) return null;
 
-  const { data: rows, error } = await fetchAllRows<LookupRow>((from, to) =>
-    client
-      .from("parts_app_view")
-      .select("skaps_number,product_name,current_quantity")
-      .eq("active", true)
-      .range(from, to),
-  );
-  if (error) return null;
+  return timed(`findInventoryPartBySkapsNumber(${normalized})`, async () => {
+    const { data, error } = await client.rpc("inventory_parts_by_normalized_skaps", {
+      p_keys: [normalized],
+    });
+    if (error) {
+      console.error("failed to resolve SKAPS number", error);
+      return null;
+    }
 
-  const matches = rows.filter(
-    (row) => row.skaps_number && normalizeSkapsNumber(row.skaps_number) === normalized,
-  );
-  return matches.length === 1 ? adapt(matches[0]!) : null;
+    const matches = (data ?? []) as LookupRow[];
+    return matches.length === 1 ? adapt(matches[0]!) : null;
+  });
 }
 
+/**
+ * Up to three "did you mean" suggestions for an unmatched SKAPS number.
+ * A candidate matches on a substring hit in either direction, same as before;
+ * the ordering is now explicitly by part_id, which is the order the previous
+ * full-catalog scan happened to return.
+ */
 export async function findFuzzyInventoryMatches(
   submittedSkaps: string,
 ): Promise<Array<{ skaps_number: string; name: string }>> {
@@ -62,24 +73,20 @@ export async function findFuzzyInventoryMatches(
   if (normalized.length < 2) return [];
 
   const client = createInventoryServiceClient();
-  const { data: rows, error } = await fetchAllRows<LookupRow>((from, to) =>
-    client
-      .from("parts_app_view")
-      .select("skaps_number,product_name,current_quantity")
-      .eq("active", true)
-      .range(from, to),
-  );
-  if (error) return [];
 
-  return rows
-    .filter((row) => {
-      if (!row.skaps_number) return false;
-      const candidate = normalizeSkapsNumber(row.skaps_number);
-      return candidate.includes(normalized) || normalized.includes(candidate);
-    })
-    .slice(0, 3)
-    .flatMap((row) => {
+  return timed(`findFuzzyInventoryMatches(${normalized})`, async () => {
+    const { data, error } = await client.rpc("inventory_parts_fuzzy_skaps", {
+      p_key: normalized,
+      p_limit: 3,
+    });
+    if (error) {
+      console.error("failed to find fuzzy SKAPS matches", error);
+      return [];
+    }
+
+    return ((data ?? []) as LookupRow[]).flatMap((row) => {
       const adapted = adapt(row);
       return adapted ? [{ skaps_number: adapted.skaps_number, name: adapted.name }] : [];
     });
+  });
 }
