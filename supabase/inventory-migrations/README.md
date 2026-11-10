@@ -28,6 +28,7 @@ Nothing in this directory is applied automatically by a build or deploy.
 | `0001_parts_list_mv.sql` | `parts_list_mv` materialized view over the list columns of `parts_app_view` where `active`, plus its indexes and `service_role`-only grants |
 | `0002_refresh_parts_list_mv.sql` | `refresh_parts_list_mv()`, called by the app after every inventory write |
 | `0003_inventory_parts_rpcs.sql` | `inventory_parts_list()`, `inventory_parts_by_normalized_skaps()`, `inventory_parts_fuzzy_skaps()` |
+| `0004_revoke_public_execute_on_import_rpc.sql` | **Security fix.** Revokes the default PUBLIC `EXECUTE` on `apply_inventory_quantity_import`, which made that `SECURITY DEFINER` write path reachable by `anon` over PostgREST |
 
 ## Conventions
 
