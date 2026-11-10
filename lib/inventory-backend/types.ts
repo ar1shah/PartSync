@@ -76,6 +76,33 @@ export interface InventoryPart {
   active: boolean;
 }
 
+/**
+ * The catalog list row — only what the tile grid renders and its client-side
+ * search reads. Deliberately much smaller than `InventoryPart`: the full
+ * 42-field shape serialized 9,988 times was 8.54MB on every Inventory page
+ * load, of which 14 fields were permanently null, empty or hardcoded.
+ *
+ * The detail modal still gets a full `InventoryPart`, fetched on open.
+ */
+export interface InventoryListPart {
+  part_id: number;
+  skaps_number: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  sub_category: string | null;
+  location_on_machine: string | null;
+  line_no: string | null;
+  warehouses: string | null;
+  quantity_on_hand: number;
+  variant_count: number;
+  has_image: boolean;
+  /** Always null from the server; the grid fills it from signed URLs on demand. */
+  image_url: string | null;
+  /** Always null — not modelled in the new backend yet. */
+  reorder_threshold: number | null;
+}
+
 export interface InventoryLookupRow {
   skaps_number: string;
   name: string;

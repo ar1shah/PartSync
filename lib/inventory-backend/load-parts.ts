@@ -1,16 +1,14 @@
+import { unstable_cache } from "next/cache";
 import { normalizeSkapsNumber } from "@/lib/forms/normalize";
 import { logPayloadSize, timed } from "@/lib/perf";
-import { fetchAllRows, fetchAllRowsParallel } from "@/lib/supabase/fetch-all";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { createInventoryServiceClient } from "./server";
 import type {
+  InventoryListPart,
   InventoryLocation,
   InventoryPart,
   InventorySpecification,
 } from "./types";
-
-/** Columns the tile grid and client-side search actually read. */
-const LIST_COLUMNS =
-  "part_id,skaps_number,product_name,product_description,location_on_machine,line_number,main_category,subcategory,current_quantity,inventory_location_count,warehouses,qr_code,active_rfid_tag_count,has_image,active";
 
 const LOCATION_COLUMNS =
   "inventory_record_id,part_id,quantity,zone,location_code,storage_location,warehouse_description,location_on_machine,line_number";
@@ -192,44 +190,142 @@ const emptyDetail = {
   updatedAt: null,
 };
 
-function listQuery(client: ReturnType<typeof createInventoryServiceClient>) {
-  return client
-    .from("parts_app_view")
-    .select(LIST_COLUMNS)
-    .eq("active", true)
-    .order("skaps_number", { ascending: true })
-    .order("part_id", { ascending: true });
+/** Cache tag for the full list. Revalidated wherever parts_list_mv is refreshed. */
+export const INVENTORY_PARTS_TAG = "inventory-parts";
+
+/**
+ * Shards exist because Vercel caps a cache entry at 2MB and silently skips
+ * anything larger. The whole list is ~1.91MB, so it is split into ~500kB
+ * entries under one shared tag. The final shard is unbounded, so the catalog
+ * can grow without a code change; OVERSIZE_SHARD_BYTES warns if one ever
+ * approaches the cap.
+ */
+const SHARD_SIZE = 2500;
+const SHARD_COUNT = 4;
+const OVERSIZE_SHARD_BYTES = 1_500_000;
+
+/**
+ * One row from inventory_parts_list(). POSITIONAL — this must stay in step
+ * with the tuple layout documented in
+ * supabase/inventory-migrations/0003_inventory_parts_rpcs.sql.
+ */
+type ListTuple = [
+  part_id: number,
+  skaps_number: string | null,
+  product_name: string | null,
+  product_description: string | null,
+  main_category: string | null,
+  subcategory: string | null,
+  location_on_machine: string | null,
+  line_number: string | null,
+  warehouses: string | null,
+  current_quantity: number | string | null,
+  inventory_location_count: number | null,
+  has_image: 1 | null,
+];
+
+function decodeListTuple(tuple: ListTuple): InventoryListPart | null {
+  const [
+    partId,
+    skapsNumber,
+    productName,
+    description,
+    category,
+    subCategory,
+    locationOnMachine,
+    lineNumber,
+    warehouses,
+    quantity,
+    locationCount,
+    hasImage,
+  ] = tuple;
+
+  if (!partId || !skapsNumber) return null;
+
+  return {
+    part_id: partId,
+    skaps_number: skapsNumber,
+    name: productName?.trim() || skapsNumber,
+    description,
+    category,
+    sub_category: subCategory,
+    location_on_machine: locationOnMachine,
+    line_no: lineNumber,
+    warehouses,
+    quantity_on_hand: numberValue(quantity),
+    variant_count: locationCount ?? 0,
+    has_image: hasImage === 1,
+    // Filled in client-side by the signed-URL effect, never by the list load.
+    image_url: null,
+    // Not modelled in the new backend yet; kept so the shared stock-status
+    // helpers work against list rows as well as full parts.
+    reorder_threshold: null,
+  };
 }
 
-/** Loads the catalog fields needed for tiles and search. Locations, specs, and images load on open. */
-export async function loadInventoryParts(): Promise<InventoryPart[]> {
+/** Fetches one shard of the list. `null` limit means "to the end". */
+async function fetchListShard(index: number): Promise<ListTuple[]> {
+  const isLast = index === SHARD_COUNT - 1;
+  const client = createInventoryServiceClient();
+
+  const { data, error } = await client.rpc("inventory_parts_list", {
+    p_offset: index * SHARD_SIZE,
+    p_limit: isLast ? null : SHARD_SIZE,
+  });
+
+  if (error) {
+    console.error(`failed to load inventory shard ${index}`, error);
+    return [];
+  }
+
+  const tuples = (data ?? []) as ListTuple[];
+
+  if (isLast) {
+    const bytes = JSON.stringify(tuples).length;
+    if (bytes > OVERSIZE_SHARD_BYTES) {
+      console.warn(
+        `inventory shard ${index} is ${bytes} bytes, approaching the 2MB cache-entry limit — raise SHARD_COUNT in lib/inventory-backend/load-parts.ts`,
+      );
+    }
+  }
+
+  return tuples;
+}
+
+/**
+ * Cached per shard rather than as one entry, with a shared tag so a single
+ * revalidateTag(INVENTORY_PARTS_TAG) drops all of them together. Safe to
+ * cache: the inventory service client reads no cookies and holds no
+ * request-scoped state, and the auth checks live in the pages, outside this.
+ */
+const shardLoaders = Array.from({ length: SHARD_COUNT }, (_, index) =>
+  unstable_cache(() => fetchListShard(index), ["inventory-parts-shard", String(index)], {
+    // Time-based backstop; writes invalidate by tag immediately.
+    revalidate: 300,
+    tags: [INVENTORY_PARTS_TAG],
+  }),
+);
+
+/**
+ * Loads the catalog fields the tile grid and its client-side search read.
+ * Locations, specs and images load on open.
+ *
+ * One round trip per shard against parts_list_mv (~40ms each) instead of a
+ * head count plus ten 1,000-row range queries against the nested
+ * parts_app_view (measured 2.2-2.7s), and all four are normally served from
+ * the Next.js cache without touching the database at all.
+ */
+export async function loadInventoryParts(): Promise<InventoryListPart[]> {
   return timed("loadInventoryParts", async () => {
-    const client = createInventoryServiceClient();
+    const shards = await Promise.all(shardLoaders.map((load) => load()));
 
-    const { count, error: countError } = await timed("loadInventoryParts.count", () =>
-      client
-        .from("parts_app_view")
-        .select("part_id", { count: "exact", head: true })
-        .eq("active", true),
-    );
-
-    const fetched = await timed("loadInventoryParts.rows", () =>
-      countError || count == null
-        ? fetchAllRows<ListRow>((from, to) => listQuery(client).range(from, to))
-        : fetchAllRowsParallel<ListRow>((from, to) => listQuery(client).range(from, to), count),
-    );
-
-    if (countError) console.error("failed to count SKAPS inventory", countError);
-    if (fetched.error) console.error("failed to load new SKAPS inventory", fetched.error);
-
-    logPayloadSize("loadInventoryParts.rows", fetched.data);
-
-    const parts = fetched.data.flatMap((row) => {
-      const part = adaptPart(row, emptyDetail);
+    const parts = shards.flat().flatMap((tuple) => {
+      const part = decodeListTuple(tuple);
       return part ? [part] : [];
     });
 
-    logPayloadSize("loadInventoryParts.adapted", parts);
+    logPayloadSize("loadInventoryParts.tuples", shards);
+    logPayloadSize("loadInventoryParts.decoded", parts);
     return parts;
   });
 }

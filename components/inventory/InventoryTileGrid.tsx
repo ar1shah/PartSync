@@ -10,10 +10,10 @@ import { normalizeSkapsNumber } from "@/lib/forms/normalize";
 import { getInventoryImageUrls, getInventoryPartDetail } from "@/lib/inventory-backend/detail-action";
 import { PartTileCard } from "./PartTileCard";
 import { PartDetailModal } from "./PartDetailModal";
-import type { InventoryPart } from "@/lib/inventory-backend/types";
+import type { InventoryListPart, InventoryPart } from "@/lib/inventory-backend/types";
 
 interface Props {
-  parts: InventoryPart[];
+  parts: InventoryListPart[];
 }
 
 type StockFilter = "all" | "in_stock" | "out_of_stock";
@@ -167,7 +167,7 @@ export function InventoryTileGrid({ parts: initialParts }: Props) {
     };
   }, [visibleImageKey]);
 
-  async function openPart(part: InventoryPart) {
+  async function openPart(part: InventoryListPart) {
     if (openingRef.current) return;
     openingRef.current = true;
     setOpenError(null);

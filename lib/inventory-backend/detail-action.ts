@@ -2,6 +2,7 @@
 
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
+import { refreshInventoryPartsCache } from "./refresh";
 import { recordAudit } from "@/lib/audit/log";
 import { requirePartSyncUser } from "./authorize";
 import { createInventoryServiceClient } from "./server";
@@ -121,6 +122,7 @@ export async function uploadPartImage(formData: FormData): Promise<UploadPartIma
     },
   });
 
+  await refreshInventoryPartsCache();
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
 

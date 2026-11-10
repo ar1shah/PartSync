@@ -3,6 +3,7 @@ import { ArrowRight, ClipboardList, Package, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/supabase/session";
 import { createInventoryServiceClient } from "@/lib/inventory-backend/server";
 import { timed } from "@/lib/perf";
 import { formatNumber } from "@/lib/utils";
@@ -11,22 +12,21 @@ export const revalidate = 60;
 
 async function loadStats() {
   return timed("home.loadStats", async () => {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await timed("home.getUser", () => supabase.auth.getUser());
+    const user = await timed("home.getUser", () => getSessionUser());
 
     if (!user) {
       return null;
     }
 
+    const supabase = await createClient();
+
     const inventory = createInventoryServiceClient();
     const [{ count: partsCount }, { count: usedThisWeekCount }] = await Promise.all([
+      // parts_list_mv is already filtered to active rows, and counting 9,988
+      // narrow rows is a couple of milliseconds versus ~145ms rebuilding the
+      // nested parts_app_view.
       timed("home.partsCount", () =>
-        inventory
-          .from("parts_app_view")
-          .select("part_id", { count: "exact", head: true })
-          .eq("active", true),
+        inventory.from("parts_list_mv").select("part_id", { count: "exact", head: true }),
       ),
       timed("home.usedThisWeekCount", () =>
         supabase

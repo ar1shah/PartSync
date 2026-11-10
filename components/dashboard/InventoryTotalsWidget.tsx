@@ -1,41 +1,28 @@
 import { Layers } from "lucide-react";
 import { WidgetCard } from "./WidgetCard";
-import { createInventoryServiceClient } from "@/lib/inventory-backend/server";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
 import { formatNumber } from "@/lib/utils";
 
+/**
+ * Derived from the cached catalog list rather than its own queries. This used
+ * to run two head counts plus a full fetchAllRows() of every part's quantity
+ * -- about twelve round trips against the nested parts_app_view on every
+ * /admin load. The list is already cached and shared with the Inventory page,
+ * so on a cache hit this widget costs no database work at all.
+ */
 export async function InventoryTotalsWidget() {
-  const inventory = createInventoryServiceClient();
+  const parts = await loadInventoryParts();
 
-  const [partsCount, multiLocation, qtyRows] = await Promise.all([
-    inventory.from("parts_app_view").select("part_id", { count: "exact", head: true }).eq("active", true),
-    inventory
-      .from("parts_app_view")
-      .select("part_id", { count: "exact", head: true })
-      .eq("active", true)
-      .gt("inventory_location_count", 1),
-    fetchAllRows<{ current_quantity: number | string | null }>((from, to) =>
-      inventory
-        .from("parts_app_view")
-        .select("current_quantity")
-        .eq("active", true)
-        .range(from, to),
-    ),
-  ]);
-
-  if (partsCount.error) console.error("failed to count inventory parts", partsCount.error);
-  if (multiLocation.error) console.error("failed to count multi-location parts", multiLocation.error);
-  if (qtyRows.error) console.error("failed to sum inventory quantity", qtyRows.error);
-
-  const totalQty = qtyRows.data.reduce((sum, row) => {
-    const qty = Number(row.current_quantity ?? 0);
-    return sum + (Number.isFinite(qty) ? qty : 0);
-  }, 0);
+  const totalQty = parts.reduce((sum, part) => sum + part.quantity_on_hand, 0);
+  const multiLocation = parts.reduce(
+    (count, part) => count + (part.variant_count > 1 ? 1 : 0),
+    0,
+  );
 
   const stats = [
-    { label: "Distinct parts", value: partsCount.count ?? 0 },
+    { label: "Distinct parts", value: parts.length },
     { label: "Total qty on hand", value: totalQty },
-    { label: "Multi-location parts", value: multiLocation.count ?? 0 },
+    { label: "Multi-location parts", value: multiLocation },
   ];
 
   return (

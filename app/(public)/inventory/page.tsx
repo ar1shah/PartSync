@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { InventoryTileGrid } from "@/components/inventory/InventoryTileGrid";
 import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
 import { logPayloadSize, timed } from "@/lib/perf";
-import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/supabase/session";
 
 export const metadata: Metadata = {
   title: "Inventory",
@@ -15,10 +15,7 @@ export const revalidate = 30;
 export default async function InventoryPage() {
   // Auth remains on the existing PartSync Supabase project during the first
   // cutover phase. Inventory data comes from the new project server-side.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await timed("inventory.getUser", () => supabase.auth.getUser());
+  const user = await timed("inventory.getUser", () => getSessionUser());
 
   if (!user) {
     redirect("/login?next=/inventory");
