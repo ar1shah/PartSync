@@ -1,9 +1,11 @@
 # PartSync -> SKAPS Spare Parts Inventory cutover
 
 
-## Trial quantity mode
+## Quantity source of truth
 
-All operational inventory quantities in **SKAPS Spare Parts Inventory** are intentionally locked at `0` during the trial period. The database trigger `trg_enforce_trial_zero_inventory_quantity` forces new or updated inventory records back to zero. Raw Datatex staging quantities remain preserved for reference. Remove or disable this trigger only when SKAPS explicitly moves quantity tracking to live production.
+Operational inventory quantities in **SKAPS Spare Parts Inventory** come from Excel imports (FULL-style Athens Inventory sheets: one row per SKAPS + Zone + Location + LWhsDesc). The trial-zero trigger has been removed so imported quantities persist.
+
+Parts Used / Parts Request Google Forms still do **not** change stock. Quantity updates only happen through the admin Excel import workflow (`apply_inventory_quantity_import`).
 
 This local build prepares PartSync to use **two Supabase projects** during the
 first production migration phase.

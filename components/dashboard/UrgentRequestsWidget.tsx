@@ -12,7 +12,7 @@ export async function UrgentRequestsWidget() {
     .from("submissions")
     .select("id, skaps_number, part_description, urgency", { count: "exact" })
     .eq("form_type", "request")
-    .eq("status", "open")
+    .neq("request_status", "ordered")
     .not("urgency", "is", null)
     .order("submitted_at", { ascending: false })
     .limit(3);
@@ -24,7 +24,7 @@ export async function UrgentRequestsWidget() {
   return (
     <WidgetCard
       title="Urgent requests"
-      description="Open requests with an urgency flag"
+      description="Unordered requests with an urgency flag"
       icon={<AlertTriangle className="h-4 w-4" />}
       href="/admin/requests"
     >

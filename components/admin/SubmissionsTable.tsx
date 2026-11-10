@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ExpenseStatusDot } from "@/components/admin/ExpenseStatusDot";
 import { PartDetailModal } from "@/components/inventory/PartDetailModal";
 import { PartHoverPreview } from "@/components/inventory/PartHoverPreview";
-import { formatDateTime, formatNumber } from "@/lib/utils";
+import { cn, formatDateTime, formatNumber } from "@/lib/utils";
 import { urgencyTone, normalizeSkapsNumber } from "@/lib/forms/normalize";
 import type { InventoryPart } from "@/lib/inventory-backend/types";
 import type { Submission } from "@/lib/supabase/types";
@@ -46,6 +46,15 @@ const EXPENSE_STATUS_LABELS: Record<string, string> = {
   testing: "Test row - not a real expense status",
 };
 
+const REQUEST_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  under_review: "Under review",
+  not_ordered: "Not ordered",
+  ordered: "Ordered",
+};
+
+type RequestStatusFilter = "all" | "pending" | "under_review" | "not_ordered" | "ordered";
+
 interface Props {
   submissions: Submission[];
   /** "used" or "request" -- controls which columns are shown. */
@@ -67,6 +76,7 @@ export function SubmissionsTable({
 }: Props) {
   const [query, setQuery] = useState("");
   const [showNeedsReview, setShowNeedsReview] = useState(false);
+  const [requestStatusFilter, setRequestStatusFilter] = useState<RequestStatusFilter>("all");
   const [selectedPart, setSelectedPart] = useState<InventoryPart | null>(null);
 
   // Normalized skaps# -> part, so recognized rows can link to the master
@@ -95,9 +105,13 @@ export function SubmissionsTable({
   );
 
   const filtered = useMemo(() => {
-    let list = showNeedsReview
-      ? submissions.filter((s) => s.status === "needs_review")
-      : submissions;
+    let list = submissions;
+    if (formType === "used" && showNeedsReview) {
+      list = list.filter((s) => s.status === "needs_review");
+    }
+    if (formType === "request" && requestStatusFilter !== "all") {
+      list = list.filter((s) => (s.request_status || "pending") === requestStatusFilter);
+    }
     const q = query.trim().toLowerCase();
     if (!q) return list;
     return list.filter((row) => {
@@ -110,13 +124,14 @@ export function SubmissionsTable({
         row.pm_type,
         row.urgency,
         row.notes,
+        row.request_status,
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return blob.includes(q);
     });
-  }, [submissions, query, showNeedsReview]);
+  }, [submissions, query, showNeedsReview, requestStatusFilter, formType]);
 
   const { thisWeek, byMonth } = useMemo(() => {
     if (!groupByPeriod) return { thisWeek: filtered, byMonth: [] as MonthGroup[] };
@@ -170,7 +185,7 @@ export function SubmissionsTable({
             { key: "line", label: "Line" },
             { key: "machine_area", label: "Machine area" },
             { key: "notes", label: "Notes" },
-            { key: "status", label: "Status" },
+            { key: "request_status", label: "Status" },
           ];
 
     const lines = [columns.map((c) => csvEscape(c.label)).join(",")];
@@ -181,6 +196,9 @@ export function SubmissionsTable({
             const value = row[c.key];
             if (c.key === "expense_status" && typeof value === "string") {
               return csvEscape(EXPENSE_STATUS_LABELS[value] ?? value);
+            }
+            if (c.key === "request_status" && typeof value === "string") {
+              return csvEscape(REQUEST_STATUS_LABELS[value] ?? value);
             }
             return csvEscape(value);
           })
@@ -219,6 +237,9 @@ export function SubmissionsTable({
                 <th className="px-4 py-3 font-medium">Submitted</th>
                 <th className="px-4 py-3 font-medium">Employee</th>
                 <th className="px-4 py-3 font-medium">SKAPS #</th>
+                {formType === "request" && (
+                  <th className="px-4 py-3 font-medium">Part</th>
+                )}
                 <th className="px-4 py-3 text-right font-medium">Qty</th>
                 <th className="px-4 py-3 font-medium">Line</th>
                 <th className="px-4 py-3 font-medium">Machine</th>
@@ -228,7 +249,10 @@ export function SubmissionsTable({
                     <th className="px-4 py-3 text-center font-medium">Expense</th>
                   </>
                 ) : (
-                  <th className="px-4 py-3 font-medium">Urgency</th>
+                  <>
+                    <th className="px-4 py-3 font-medium">Urgency</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                  </>
                 )}
               </tr>
             </thead>
@@ -266,13 +290,18 @@ export function SubmissionsTable({
                             {row.skaps_number ?? "-"}
                           </span>
                         )}
-                        {row.status === "needs_review" && (
+                        {formType === "used" && row.status === "needs_review" && (
                           <Badge tone="warning" className="w-fit text-[10px]">
                             Needs review
                           </Badge>
                         )}
                       </div>
                     </td>
+                    {formType === "request" && (
+                      <td className="px-4 py-3 text-slate-600">
+                        <span className="line-clamp-2">{row.part_description ?? "-"}</span>
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-right text-slate-700">
                       {row.quantity !== null ? formatNumber(row.quantity) : "-"}
                     </td>
@@ -286,13 +315,18 @@ export function SubmissionsTable({
                         </td>
                       </>
                     ) : (
-                      <td className="px-4 py-3">
-                        {row.urgency ? (
-                          <Badge tone={urgencyTone(row.urgency)}>{row.urgency}</Badge>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </td>
+                      <>
+                        <td className="px-4 py-3">
+                          {row.urgency ? (
+                            <Badge tone={urgencyTone(row.urgency)}>{row.urgency}</Badge>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <RequestStatusBadge status={row.request_status} />
+                        </td>
+                      </>
                     )}
                   </tr>
                 );
@@ -338,6 +372,34 @@ export function SubmissionsTable({
           </div>
         </div>
 
+        {formType === "request" && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {(
+              [
+                ["all", "All"],
+                ["pending", "Pending"],
+                ["under_review", "Under review"],
+                ["not_ordered", "Not ordered"],
+                ["ordered", "Ordered"],
+              ] as Array<[RequestStatusFilter, string]>
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setRequestStatusFilter(value)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                  requestStatusFilter === value
+                    ? "bg-blue-700 text-white"
+                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <p className="mt-3 text-xs text-slate-500">
           Showing {formatNumber(filtered.length)} of {formatNumber(submissions.length)} submissions
         </p>
@@ -377,6 +439,24 @@ export function SubmissionsTable({
       </div>
     </TooltipProvider>
   );
+}
+
+function RequestStatusBadge({ status }: { status: string | null | undefined }) {
+  const value = status || "pending";
+  if (value === "ordered") {
+    return <Badge className="whitespace-nowrap" tone="success">{REQUEST_STATUS_LABELS.ordered}</Badge>;
+  }
+  if (value === "not_ordered") {
+    return <Badge className="whitespace-nowrap" tone="danger">{REQUEST_STATUS_LABELS.not_ordered}</Badge>;
+  }
+  if (value === "under_review") {
+    return (
+      <Badge className="whitespace-nowrap" tone="warning">
+        {REQUEST_STATUS_LABELS.under_review}
+      </Badge>
+    );
+  }
+  return <Badge className="whitespace-nowrap" tone="neutral">{REQUEST_STATUS_LABELS.pending}</Badge>;
 }
 
 function MonthSection({
