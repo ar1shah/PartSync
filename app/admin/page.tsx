@@ -3,7 +3,7 @@ import { WelcomeHeader } from "@/components/dashboard/WelcomeHeader";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { WidgetSkeleton } from "@/components/admin/AdminSkeletons";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/supabase/session";
+import { getSessionUser, getUserPreferences } from "@/lib/supabase/session";
 import {
   canUseWidget,
   parseDashboardLayout,
@@ -29,11 +29,8 @@ export default async function AdminDashboardPage() {
   let layoutRaw: unknown = null;
   const role = user ? await getRole(user.id) : "staff";
   if (user) {
-    const { data: prefs } = await supabase
-      .from("user_preferences")
-      .select("dashboard_layout")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    // Shared with the admin layout's read via React cache -- one round trip.
+    const prefs = await getUserPreferences(user.id);
     layoutRaw = prefs?.dashboard_layout ?? null;
   }
 

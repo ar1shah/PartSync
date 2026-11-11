@@ -6,10 +6,10 @@ import { FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InventoryTileGrid } from "@/components/inventory/InventoryTileGrid";
 import { ImportExcelModal } from "@/components/inventory/ImportExcelModal";
-import type { InventoryListPart } from "@/lib/inventory-backend/types";
+import type { ListTuple } from "@/lib/inventory-backend/list-tuple";
 
 interface Props {
-  inventoryParts: InventoryListPart[];
+  inventoryParts: ListTuple[];
   canImport: boolean;
 }
 

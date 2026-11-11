@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { AdminMobileNav } from "@/components/nav/AdminMobileNav";
 import { AdminSidebar } from "@/components/nav/AdminSidebar";
 import { createClient } from "@/lib/supabase/server";
-import { getProfile, getSessionUser } from "@/lib/supabase/session";
+import { getProfile, getSessionUser, getUserPreferences } from "@/lib/supabase/session";
 import { getRole } from "@/lib/auth/roles";
 import { cn } from "@/lib/utils";
 import { densityClass, getBackgroundPreset } from "@/lib/dashboard/backgrounds";
@@ -19,13 +19,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   const supabase = await createClient();
-  const [{ data: unreadCount }, { data: prefs }, profile, role] = await Promise.all([
+  const [{ data: unreadCount }, prefs, profile, role] = await Promise.all([
     supabase.rpc("unread_notification_count"),
-    supabase
-      .from("user_preferences")
-      .select("background, density")
-      .eq("user_id", user.id)
-      .maybeSingle(),
+    getUserPreferences(user.id),
     getProfile(user.id),
     getRole(user.id),
   ]);

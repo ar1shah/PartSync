@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { normalizeSkapsNumber } from "@/lib/forms/normalize";
+import { decodeListTuples, type ListTuple } from "./list-tuple";
 import { logPayloadSize, timed } from "@/lib/perf";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { createInventoryServiceClient } from "./server";
@@ -204,65 +205,6 @@ const SHARD_SIZE = 2500;
 const SHARD_COUNT = 4;
 const OVERSIZE_SHARD_BYTES = 1_500_000;
 
-/**
- * One row from inventory_parts_list(). POSITIONAL — this must stay in step
- * with the tuple layout documented in
- * supabase/inventory-migrations/0003_inventory_parts_rpcs.sql.
- */
-type ListTuple = [
-  part_id: number,
-  skaps_number: string | null,
-  product_name: string | null,
-  product_description: string | null,
-  main_category: string | null,
-  subcategory: string | null,
-  location_on_machine: string | null,
-  line_number: string | null,
-  warehouses: string | null,
-  current_quantity: number | string | null,
-  inventory_location_count: number | null,
-  has_image: 1 | null,
-];
-
-function decodeListTuple(tuple: ListTuple): InventoryListPart | null {
-  const [
-    partId,
-    skapsNumber,
-    productName,
-    description,
-    category,
-    subCategory,
-    locationOnMachine,
-    lineNumber,
-    warehouses,
-    quantity,
-    locationCount,
-    hasImage,
-  ] = tuple;
-
-  if (!partId || !skapsNumber) return null;
-
-  return {
-    part_id: partId,
-    skaps_number: skapsNumber,
-    name: productName?.trim() || skapsNumber,
-    description,
-    category,
-    sub_category: subCategory,
-    location_on_machine: locationOnMachine,
-    line_no: lineNumber,
-    warehouses,
-    quantity_on_hand: numberValue(quantity),
-    variant_count: locationCount ?? 0,
-    has_image: hasImage === 1,
-    // Filled in client-side by the signed-URL effect, never by the list load.
-    image_url: null,
-    // Not modelled in the new backend yet; kept so the shared stock-status
-    // helpers work against list rows as well as full parts.
-    reorder_threshold: null,
-  };
-}
-
 /** Fetches one shard of the list. `null` limit means "to the end". */
 async function fetchListShard(index: number): Promise<ListTuple[]> {
   const isLast = index === SHARD_COUNT - 1;
@@ -307,27 +249,32 @@ const shardLoaders = Array.from({ length: SHARD_COUNT }, (_, index) =>
 );
 
 /**
- * Loads the catalog fields the tile grid and its client-side search read.
- * Locations, specs and images load on open.
+ * Loads the catalog list in its compact tuple form.
  *
  * One round trip per shard against parts_list_mv (~40ms each) instead of a
  * head count plus ten 1,000-row range queries against the nested
  * parts_app_view (measured 2.2-2.7s), and all four are normally served from
  * the Next.js cache without touching the database at all.
+ *
+ * Returns tuples rather than objects on purpose: these cross the RSC boundary
+ * into the browser, where the repeated field names would cost 2.2MB more than
+ * the data itself. The grid decodes them client-side.
+ */
+export async function loadInventoryPartTuples(): Promise<ListTuple[]> {
+  return timed("loadInventoryPartTuples", async () => {
+    const shards = await Promise.all(shardLoaders.map((load) => load()));
+    const tuples = shards.flat();
+    logPayloadSize("loadInventoryPartTuples", tuples);
+    return tuples;
+  });
+}
+
+/**
+ * Decoded list rows, for server-side callers that genuinely need objects.
+ * Anything shipping the list to the browser should pass tuples instead.
  */
 export async function loadInventoryParts(): Promise<InventoryListPart[]> {
-  return timed("loadInventoryParts", async () => {
-    const shards = await Promise.all(shardLoaders.map((load) => load()));
-
-    const parts = shards.flat().flatMap((tuple) => {
-      const part = decodeListTuple(tuple);
-      return part ? [part] : [];
-    });
-
-    logPayloadSize("loadInventoryParts.tuples", shards);
-    logPayloadSize("loadInventoryParts.decoded", parts);
-    return parts;
-  });
+  return decodeListTuples(await loadInventoryPartTuples());
 }
 
 type SkapsLookupRow = {

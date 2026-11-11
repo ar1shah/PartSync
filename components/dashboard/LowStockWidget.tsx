@@ -1,6 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 import { WidgetCard } from "./WidgetCard";
-import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
+import { loadInventoryPartTuples } from "@/lib/inventory-backend/load-parts";
+import { decodeListTuples, summarizeTuples, TUPLE } from "@/lib/inventory-backend/list-tuple";
 import { formatNumber } from "@/lib/utils";
 
 /**
@@ -9,9 +10,12 @@ import { formatNumber } from "@/lib/utils";
  * skaps_number, which is the order the sample used.
  */
 export async function LowStockWidget() {
-  const parts = await loadInventoryParts();
-  const zeroStock = parts.filter((part) => part.quantity_on_hand <= 0);
-  const sample = zeroStock.slice(0, 3);
+  const tuples = await loadInventoryPartTuples();
+  // Count over tuples; only decode the three rows actually rendered.
+  const { zeroStockCount } = summarizeTuples(tuples);
+  const sample = decodeListTuples(
+    tuples.filter((t) => Number(t[TUPLE.quantity] ?? 0) <= 0).slice(0, 3),
+  );
 
   return (
     <WidgetCard
@@ -21,7 +25,7 @@ export async function LowStockWidget() {
       href="/admin/inventory"
     >
       <div className="flex items-baseline gap-3">
-        <span className="text-3xl font-semibold text-slate-900">{formatNumber(zeroStock.length)}</span>
+        <span className="text-3xl font-semibold text-slate-900">{formatNumber(zeroStockCount)}</span>
         <span className="text-xs text-slate-500">parts at zero</span>
       </div>
 

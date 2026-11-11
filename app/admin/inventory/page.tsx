@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Plus, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { loadInventoryParts } from "@/lib/inventory-backend/load-parts";
+import { loadInventoryPartTuples } from "@/lib/inventory-backend/load-parts";
 import { logPayloadSize } from "@/lib/perf";
 import { getCurrentRole } from "@/lib/auth/roles";
 import { can } from "@/lib/auth/permissions";
@@ -10,7 +10,7 @@ import { AdminInventoryClient } from "./AdminInventoryClient";
 export const dynamic = "force-dynamic";
 
 export default async function AdminInventoryPage() {
-  const [inventoryParts, role] = await Promise.all([loadInventoryParts(), getCurrentRole()]);
+  const [inventoryParts, role] = await Promise.all([loadInventoryPartTuples(), getCurrentRole()]);
   logPayloadSize("admin.inventory.parts", inventoryParts);
 
   return (
