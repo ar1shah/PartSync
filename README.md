@@ -89,7 +89,7 @@ The catalog lives in its own Supabase project with no browser access at all — 
 
 **Serving a 10k-part catalog without re-deriving it every time.** The catalog view was nested four levels deep, so Postgres rebuilt the whole thing for every query — and four pages each loaded all ~10,000 parts on every render. Flattening the list columns into a materialized view and caching the result behind a tag that write paths invalidate took it from ~2.5s to a read that touches the database only after a write or a 5-minute backstop.
 
-**Keeping the list in tuple form all the way to the browser.** With ~10,000 rows, the repeated JSON field names cost more than the data: 4.23MB as objects versus 2.00MB as arrays for identical content. The list stays as arrays across both boundaries — database to server, and server to browser — and is decoded in one pass inside the grid component. Decoding it on the server instead would have given back the entire saving at the point where it matters most, which is exactly the bug this started as.
+**Keeping the list in tuple form, and being honest about why.** With ~10,000 rows the repeated JSON field names are bigger than the data itself: 4.23MB as objects versus 2.00MB as arrays. The obvious conclusion — that this halves what users download — is wrong, and measuring said so. Brotli already collapses repeated field names, so on the wire it is 458kB versus 424kB, a 7% difference. The change is still worth keeping, but for the reasons that survived measurement: ~2MB less JSON to parse and hold in memory on a phone, and a cache entry that fits under Vercel's 2MB per-entry limit. The uncompressed number was never the number users felt.
 
 ## Results
 
@@ -97,7 +97,7 @@ The catalog lives in its own Supabase project with no browser access at all — 
 - Running in production and used daily by SKAPS staff
 - Tracks roughly 9,000 parts and over 10,000 form submissions to date
 - Catalog load went from ~2.5s to ~0.5s on a cache miss, and no database work at all on a hit
-- Payload to the browser dropped from 8.5MB to ~2.0MB per inventory page load
+- Inventory page transfer is ~424kB brotli; the uncompressed payload dropped from 8.5MB to ~1.8MB, which is what the browser has to parse and hold
 
 ## What's Next
 
