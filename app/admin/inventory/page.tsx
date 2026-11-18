@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, ScanLine } from "lucide-react";
+import { FileSpreadsheet, Plus, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { loadInventoryPartTuples } from "@/lib/inventory-backend/load-parts";
 import { logPayloadSize } from "@/lib/perf";
@@ -27,6 +27,14 @@ export default async function AdminInventoryPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {can(role, "inventory.import") && (
+            <Button asChild variant="outline">
+              <Link href="/admin/inventory/import">
+                <FileSpreadsheet className="h-4 w-4" />
+                Import Excel
+              </Link>
+            </Button>
+          )}
           <Button asChild variant="outline">
             <Link href="/admin/inventory/scan">
               <ScanLine className="h-4 w-4" />
@@ -45,10 +53,7 @@ export default async function AdminInventoryPage() {
       </div>
 
       <div className="mt-8">
-        <AdminInventoryClient
-          inventoryParts={inventoryParts}
-          canImport={can(role, "inventory.import")}
-        />
+        <AdminInventoryClient inventoryParts={inventoryParts} />
       </div>
     </div>
   );

@@ -1,11 +1,13 @@
 /**
  * Parses Athens Inventory Excel workbooks into normalized location rows for
- * `apply_inventory_quantity_import`. Expects FULL_08112026-style headers:
+ * `process_inventory_import`. Expects FULL_08112026-style headers:
  * SKAPSNo, ProductName, Product Desc, Location On Machine, Line No, Quantity,
  * Zone, Location, Storage Location, LWhsDesc, New_Sub_Category, New_Main_Category.
  */
 
 export interface ExcelImportRow {
+  /** 1-based Excel row number, for pointing the user back at the sheet. */
+  row_number: number;
   skaps_number: string;
   product_name: string | null;
   product_description: string | null;
@@ -70,20 +72,33 @@ function canonicalHeader(value: unknown): string {
     .replace(/\s+/g, " ");
 }
 
-function cellToString(value: unknown): string | null {
+const SCIENTIFIC = /^[+-]?[\d.]+e[+-]?\d+$/i;
+
+/**
+ * Numeric cells use the text Excel displays (custom formats can show a code
+ * like "1917-1" for the value 6211), except rounded scientific notation such
+ * as "1.00E+11", where the raw value keeps the digits. A cell showing zero in
+ * scientific notation ("0.00E+00") held text Excel misread as a number, such
+ * as the part code 1451E-6547, and is treated as blank. Line breaks and
+ * Excel's escaped carriage return (_x000D_) collapse to single spaces, which
+ * is how the inventory database stores text.
+ */
+function cellToString(value: unknown, display?: unknown): string | null {
   if (value === null || value === undefined) return null;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed.length === 0 ? null : trimmed;
+  let text: string;
+  if (typeof value === "number") {
+    const shown = typeof display === "string" ? display.trim() : "";
+    if (value === 0 && SCIENTIFIC.test(shown)) return null;
+    if (shown && !SCIENTIFIC.test(shown)) text = shown;
+    else if (Number.isFinite(value)) text = String(value);
+    else return null;
+  } else if (typeof value === "boolean") {
+    text = value ? "true" : "false";
+  } else {
+    text = String(value);
   }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    // Preserve integers without scientific notation / trailing .0
-    if (Number.isInteger(value)) return String(value);
-    return String(value);
-  }
-  if (typeof value === "boolean") return value ? "true" : "false";
-  const s = String(value).trim();
-  return s.length === 0 ? null : s;
+  const cleaned = text.replace(/_x000D_?/gi, " ").replace(/\s+/g, " ").trim();
+  return cleaned.length === 0 ? null : cleaned;
 }
 
 function cellToQuantity(value: unknown): number | null {
@@ -136,8 +151,10 @@ function locationKey(row: Pick<ExcelImportRow, "skaps_number" | "zone" | "locati
 }
 
 /**
- * Pick the first sheet that has FULL-style headers, otherwise use `preferredSheet`
- * if provided, otherwise the first sheet.
+ * `preferredSheet` when it exists; otherwise a FULL-style sheet whose name
+ * starts with "FULL"; otherwise the FULL-style sheet with the most rows (the
+ * Athens workbook also has small per-category tabs with the same headers,
+ * such as DISC); otherwise the first sheet.
  */
 export function pickInventorySheet(
   sheets: Array<{ name: string; rows: unknown[][] }>,
@@ -150,18 +167,48 @@ export function pickInventorySheet(
     if (match) return match;
   }
 
-  for (const sheet of sheets) {
-    const headers = sheet.rows[0] ?? [];
-    if (sheetLooksLikeFullInventory(headers)) return sheet;
+  const fullStyle = sheets.filter((s) => sheetLooksLikeFullInventory(s.rows[0] ?? []));
+  const named = fullStyle.find((s) => s.name.trim().toUpperCase().startsWith("FULL"));
+  if (named) return named;
+  if (fullStyle.length > 0) {
+    return fullStyle.reduce((best, s) => (s.rows.length > best.rows.length ? s : best));
   }
 
   return sheets[0] ?? null;
+}
+
+/**
+ * Splits rows into chunks of roughly `size`, never splitting one SKAPS number
+ * across chunks: the import treats the first row of an unseen SKAPS as a new
+ * part and later rows as its extra bins, which only holds within one call.
+ */
+export function chunkRowsBySkaps(rows: ExcelImportRow[], size: number): ExcelImportRow[][] {
+  const groups = new Map<string, ExcelImportRow[]>();
+  for (const row of rows) {
+    const group = groups.get(row.skaps_number);
+    if (group) group.push(row);
+    else groups.set(row.skaps_number, [row]);
+  }
+
+  const chunks: ExcelImportRow[][] = [];
+  let current: ExcelImportRow[] = [];
+  for (const group of groups.values()) {
+    if (current.length > 0 && current.length + group.length > size) {
+      chunks.push(current);
+      current = [];
+    }
+    current.push(...group);
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
 }
 
 export function parseInventoryExcelSheet(
   sheetName: string,
   matrix: unknown[][],
   availableSheets: string[],
+  /** Same sheet read with `raw: false` (display text); used for text columns. */
+  displayMatrix?: unknown[][],
 ): ExcelParseResult {
   const issues: ExcelParseIssue[] = [];
   const rows: ExcelImportRow[] = [];
@@ -200,12 +247,19 @@ export function parseInventoryExcelSheet(
     const sheetRow = matrix[i] ?? [];
     const excelRowNumber = i + 1;
 
+    const displayRow = displayMatrix?.[i] ?? [];
+
     const pick = (field: FieldKey): unknown => {
       const idx = indexMap[field];
       return idx === undefined ? null : sheetRow[idx];
     };
 
-    const skaps = cellToString(pick("skaps_number"));
+    const text = (field: FieldKey): string | null => {
+      const idx = indexMap[field];
+      return idx === undefined ? null : cellToString(sheetRow[idx], displayRow[idx]);
+    };
+
+    const skaps = text("skaps_number");
     if (!skaps) {
       // Skip trailing blank rows silently.
       const anyValue = sheetRow.some((v) => cellToString(v) !== null);
@@ -238,18 +292,19 @@ export function parseInventoryExcelSheet(
     }
 
     const row: ExcelImportRow = {
+      row_number: excelRowNumber,
       skaps_number: skaps,
-      product_name: cellToString(pick("product_name")),
-      product_description: cellToString(pick("product_description")),
-      location_on_machine: cellToString(pick("location_on_machine")),
-      line_number: cellToString(pick("line_number")),
+      product_name: text("product_name"),
+      product_description: text("product_description"),
+      location_on_machine: text("location_on_machine"),
+      line_number: text("line_number"),
       quantity,
-      zone: cellToString(pick("zone")),
-      location_code: cellToString(pick("location_code")),
-      storage_location: cellToString(pick("storage_location")),
-      warehouse_description: cellToString(pick("warehouse_description")),
-      main_category: cellToString(pick("main_category")),
-      subcategory: cellToString(pick("subcategory")),
+      zone: text("zone"),
+      location_code: text("location_code"),
+      storage_location: text("storage_location"),
+      warehouse_description: text("warehouse_description"),
+      main_category: text("main_category"),
+      subcategory: text("subcategory"),
     };
 
     const key = locationKey(row);

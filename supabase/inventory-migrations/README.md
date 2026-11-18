@@ -29,6 +29,12 @@ Nothing in this directory is applied automatically by a build or deploy.
 | `0002_refresh_parts_list_mv.sql` | `refresh_parts_list_mv()`, called by the app after every inventory write |
 | `0003_inventory_parts_rpcs.sql` | `inventory_parts_list()`, `inventory_parts_by_normalized_skaps()`, `inventory_parts_fuzzy_skaps()` |
 | `0004_revoke_public_execute_on_import_rpc.sql` | **Security fix.** Revokes the default PUBLIC `EXECUTE` on `apply_inventory_quantity_import`, which made that `SECURITY DEFINER` write path reachable by `anon` over PostgREST |
+| `0005_excel_import_preview.sql` | `current_inventory_detail` counts every active bin (it used to hide bins outside the latest import batch); `process_inventory_import()` (one path for preview and apply: add/update only, never deletes or touches images); `inventory_import_untouched()` |
+| `0006_import_leading_zero_matching.sql` | `import_same_text()`: digit-only codes match after dropping leading zeros (Excel saves `001` as `1`), used for bin matching and detail comparisons in `process_inventory_import()` |
+| `0007_import_text_normalization.sql` | Comparisons ignore line breaks / `_x000D_` and treat number-like values as numbers (`1.00014E+11` = `100014000000`) |
+| `0008_import_ignore_excel_quote_prefix.sql` | Comparisons ignore one leading apostrophe (Excel's "store as text" marker, dropped when the sheet is saved) |
+| `0009_import_inlinable_helpers.sql` | **Performance.** The text helpers become single inlinable expressions (no `SET search_path`, which blocks inlining; built-ins qualified instead) and `inventory_import_untouched()` hash-joins precomputed keys: ~8.7s, which hit the statement timeout, down to well under a second |
+| `0010_drop_apply_inventory_quantity_import.sql` | Drops the old import RPC. **Apply only after** the app using 0005 is deployed |
 
 ## Conventions
 

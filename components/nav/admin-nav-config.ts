@@ -4,6 +4,7 @@ import {
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
+  FileSpreadsheet,
   History,
   LayoutDashboard,
   ScrollText,
@@ -38,6 +39,12 @@ export const adminNavSections: { label: string; items: NavItem[] }[] = [
       { href: "/admin/used", label: "Parts used", icon: ClipboardCheck },
       { href: "/admin/requests", label: "Parts requests", icon: ClipboardList },
       { href: "/admin/inventory", label: "Inventory", icon: BoxIcon },
+      {
+        href: "/admin/inventory/import",
+        label: "Import Excel",
+        icon: FileSpreadsheet,
+        permission: "inventory.import",
+      },
       { href: "/admin/repair", label: "Parts in repair", icon: Wrench },
     ],
   },
@@ -66,8 +73,21 @@ export function navSectionsForRole(role: AppRole) {
     .filter((section) => section.items.length > 0);
 }
 
-export function isNavItemActive(item: NavItem, pathname: string) {
+function matchesPath(item: NavItem, pathname: string) {
   return item.exact ? pathname === item.href : pathname.startsWith(item.href);
+}
+
+/** Active when it matches and no longer, more specific item (e.g. a sub-page) also matches. */
+export function isNavItemActive(item: NavItem, pathname: string) {
+  if (!matchesPath(item, pathname)) return false;
+  return !adminNavSections.some((section) =>
+    section.items.some(
+      (other) =>
+        other.href.length > item.href.length &&
+        other.href.startsWith(item.href) &&
+        matchesPath(other, pathname),
+    ),
+  );
 }
 
 /** Resolves the current page's nav label for use in the mobile header. */

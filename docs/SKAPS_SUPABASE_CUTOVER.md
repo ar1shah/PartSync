@@ -5,7 +5,7 @@
 
 Operational inventory quantities in **SKAPS Spare Parts Inventory** come from Excel imports (FULL-style Athens Inventory sheets: one row per SKAPS + Zone + Location + LWhsDesc). The trial-zero trigger has been removed so imported quantities persist.
 
-Parts Used / Parts Request Google Forms still do **not** change stock. Quantity updates only happen through the admin Excel import workflow (`apply_inventory_quantity_import`).
+Parts Used / Parts Request Google Forms do **not** change stock. Quantity updates only happen through the admin Excel import page (`/admin/inventory/import` → `process_inventory_import`), which shows a full preview before anything is written.
 
 This local build prepares PartSync to use **two Supabase projects** during the
 first production migration phase.
@@ -181,16 +181,19 @@ change and could corrupt location-level stock.
 The used-submission log still resolves SKAPS numbers against the new inventory,
 and unmatched numbers are still flagged for review.
 
-Before enabling automatic quantity changes, choose one of these models:
+**Quantity comes only from the Excel import** at `/admin/inventory/import`
+(admins): upload the workbook, review the per-row preview, then apply. The
+`SKAPS_INVENTORY_AUTO_DEDUCT` switch has been removed, and the legacy
+`trg_apply_used_submission` trigger (which subtracted Parts Used from the old
+`public.parts` table) was dropped in `supabase/migrations/0022`.
+
+If automatic deductions are ever wanted, choose one of these models first:
 
 1. Add a storage/location field to the Parts Used form; or
 2. Build a scan/issue workflow where the operator scans the exact inventory
    location/tag; or
 3. Introduce a quantity transaction ledger with an explicit policy for
    unassigned location adjustments.
-
-`SKAPS_INVENTORY_AUTO_DEDUCT` is included in the environment template but must
-remain `false` until the quantity workflow is designed and implemented.
 
 ## Production cutover checklist
 

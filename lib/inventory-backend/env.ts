@@ -27,10 +27,4 @@ export const inventoryEnv = {
       process.env.SKAPS_INVENTORY_SUPABASE_SERVICE_ROLE_KEY,
     );
   },
-  // Deliberately false during the first cutover. The Google parts-used form
-  // does not identify which physical inventory location supplied a part, so
-  // automatically decrementing a multi-location part would be unsafe.
-  get autoDeductUsage() {
-    return process.env.SKAPS_INVENTORY_AUTO_DEDUCT === "true";
-  },
 };
